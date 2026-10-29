@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Dashboard, DEFAULT_CUES, SavedCue, withDefaults } from './defaults';
 
 export type Mode = 'rider' | 'director';
 
 const KEYS = {
   mode: 'sawaari.mode',
   riderCode: 'sawaari.riderCode',
-  lastCue: 'sawaari.lastCue',
+  cues: 'sawaari.cues.v2',
+  dashboard: 'sawaari.dashboard.v2',
 };
 
 async function get<T>(key: string): Promise<T | null> {
@@ -31,6 +33,11 @@ export const store = {
   setMode: (m: Mode | null) => set(KEYS.mode, m),
   getRiderCode: () => get<string>(KEYS.riderCode),
   setRiderCode: (c: string) => set(KEYS.riderCode, c),
-  getLastCue: <T,>() => get<T>(KEYS.lastCue),
-  setLastCue: (c: unknown) => set(KEYS.lastCue, c),
+  getCues: async (): Promise<SavedCue[]> => {
+    const saved = await get<SavedCue[]>(KEYS.cues);
+    return Array.isArray(saved) ? saved : DEFAULT_CUES;
+  },
+  setCues: (c: SavedCue[]) => set(KEYS.cues, c),
+  getDashboard: async (): Promise<Dashboard> => withDefaults(await get<Dashboard>(KEYS.dashboard)),
+  setDashboard: (d: Dashboard) => set(KEYS.dashboard, d),
 };

@@ -1,29 +1,28 @@
 import { Text, View } from 'react-native';
-import { loanOffer, Order, orders, rating, rupee, today, wallet, week } from './mockData';
+import { Dashboard, Order, rupee } from './defaults';
 import { C, Card, s } from './ui';
 
 const AMBER_BG = '#FFF4E5';
 const AMBER_LINE = '#F5C98B';
 const AMBER_INK = '#7A4100';
 
-/** The on-camera dashboard. Every number comes from mockData.ts. */
-export function RiderDashboard({ online }: { online: boolean }) {
-  const progress = Math.min(1, today.orders / today.targetOrders);
-  const maxWeek = Math.max(...week.map((w) => w.amount));
+/** The on-camera dashboard. Everything shown comes from `data`, editable in the app. */
+export function RiderDashboard({ online, data }: { online: boolean; data: Dashboard }) {
+  const { alert, today, wallet, rating, week, orders, loan } = data;
+  const progress = today.targetOrders > 0 ? Math.min(1, today.orders / today.targetOrders) : 0;
+  const maxWeek = Math.max(1, ...week.map((w) => w.amount));
 
   return (
     <View style={{ gap: 16 }}>
-      <View
-        accessibilityRole="alert"
-        style={{ backgroundColor: '#FDECEA', borderRadius: 16, padding: 16, gap: 4, borderWidth: 1, borderColor: '#F5C2BC' }}
-      >
-        <Text style={{ color: C.danger, fontWeight: '800', fontSize: 15 }}>
-          Cash deposit overdue: {rupee(Math.abs(wallet.balance))}
-        </Text>
-        <Text style={{ color: '#5F2120', fontSize: 14, lineHeight: 20 }}>
-          Deposit by {wallet.depositDeadline} or your ID will be temporarily blocked.
-        </Text>
-      </View>
+      {alert.show && (
+        <View
+          accessibilityRole="alert"
+          style={{ backgroundColor: '#FDECEA', borderRadius: 16, padding: 16, gap: 4, borderWidth: 1, borderColor: '#F5C2BC' }}
+        >
+          <Text style={{ color: C.danger, fontWeight: '800', fontSize: 15 }}>{alert.title}</Text>
+          {!!alert.body && <Text style={{ color: '#5F2120', fontSize: 14, lineHeight: 20 }}>{alert.body}</Text>}
+        </View>
+      )}
 
       <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -43,7 +42,9 @@ export function RiderDashboard({ online }: { online: boolean }) {
             <View style={{ width: `${progress * 100}%`, height: 8, backgroundColor: C.primary }} />
           </View>
           <Text style={{ color: C.muted, fontSize: 13 }}>
-            {today.targetOrders - today.orders} more orders needed · offer ends at midnight
+            {today.orders >= today.targetOrders
+              ? 'Target reached'
+              : `${today.targetOrders - today.orders} more orders needed · offer ends at midnight`}
           </Text>
         </View>
       </Card>
@@ -52,15 +53,17 @@ export function RiderDashboard({ online }: { online: boolean }) {
         <View style={{ flex: 1 }}>
           <Card>
             <Text style={{ color: C.muted, fontSize: 13 }}>Wallet</Text>
-            <Text style={{ color: C.danger, fontSize: 24, fontWeight: '800' }}>{rupee(wallet.balance)}</Text>
-            <Text style={{ color: C.muted, fontSize: 12 }}>Cash to deposit</Text>
+            <Text style={{ color: wallet.balance < 0 ? C.danger : C.ink, fontSize: 24, fontWeight: '800' }}>{rupee(wallet.balance)}</Text>
+            <Text style={{ color: C.muted, fontSize: 12 }}>{wallet.label}</Text>
           </Card>
         </View>
         <View style={{ flex: 1 }}>
           <Card>
             <Text style={{ color: C.muted, fontSize: 13 }}>Rating</Text>
-            <Text style={{ color: AMBER_INK, fontSize: 24, fontWeight: '800' }}>{rating.value.toFixed(1)} ★</Text>
-            <Text style={{ color: C.muted, fontSize: 12 }}>Below {rating.threshold}: fewer orders</Text>
+            <Text style={{ color: rating.value < rating.threshold ? AMBER_INK : C.ink, fontSize: 24, fontWeight: '800' }}>{rating.value.toFixed(1)} ★</Text>
+            <Text style={{ color: C.muted, fontSize: 12 }}>
+              {rating.value < rating.threshold ? `Below ${rating.threshold}: fewer orders` : 'Good standing'}
+            </Text>
           </Card>
         </View>
       </View>
@@ -71,7 +74,7 @@ export function RiderDashboard({ online }: { online: boolean }) {
           {week.map((w, i) => {
             const last = i === week.length - 1;
             return (
-              <View key={w.day} style={{ alignItems: 'center', gap: 6, flex: 1 }}>
+              <View key={`${w.day}-${i}`} style={{ alignItems: 'center', gap: 6, flex: 1 }}>
                 <Text style={{ fontSize: 11, color: last ? C.ink : C.muted, fontWeight: last ? '700' : '400' }}>
                   {w.amount}
                 </Text>
@@ -89,27 +92,26 @@ export function RiderDashboard({ online }: { online: boolean }) {
           })}
         </View>
         <Text style={{ color: C.muted, fontSize: 13 }}>
-          Total {rupee(week.reduce((a, w) => a + w.amount, 0))} · down from last week
+          Total {rupee(week.reduce((a, w) => a + w.amount, 0))}
         </Text>
       </Card>
 
       <Card>
         <Text style={s.h2}>Recent orders</Text>
         <View style={{ gap: 0 }}>
+          {orders.length === 0 && <Text style={{ color: C.muted }}>No orders yet today.</Text>}
           {orders.map((o, i) => (
             <OrderRow key={o.id} order={o} last={i === orders.length - 1} />
           ))}
         </View>
       </Card>
 
-      <View style={{ backgroundColor: AMBER_BG, borderRadius: 16, padding: 16, gap: 4, borderWidth: 1, borderColor: AMBER_LINE }}>
-        <Text style={{ color: AMBER_INK, fontWeight: '800', fontSize: 15 }}>
-          Instant cash up to {rupee(loanOffer.amount)}
-        </Text>
-        <Text style={{ color: AMBER_INK, fontSize: 14 }}>
-          Pre-approved for you · {loanOffer.rate} · auto-deducted from payouts
-        </Text>
-      </View>
+      {loan.show && (
+        <View style={{ backgroundColor: AMBER_BG, borderRadius: 16, padding: 16, gap: 4, borderWidth: 1, borderColor: AMBER_LINE }}>
+          <Text style={{ color: AMBER_INK, fontWeight: '800', fontSize: 15 }}>{loan.title}</Text>
+          {!!loan.body && <Text style={{ color: AMBER_INK, fontSize: 14 }}>{loan.body}</Text>}
+        </View>
+      )}
     </View>
   );
 }
@@ -148,7 +150,7 @@ function OrderRow({ order, last }: { order: Order; last: boolean }) {
         <Text style={{ fontSize: 13, color: C.muted }} numberOfLines={1}>
           → {order.to} · {order.km} km · {order.time}
         </Text>
-        {order.note && (
+        {!!order.note && (
           <Text style={{ fontSize: 12, color: order.status === 'delivered' ? C.muted : st.color }}>{order.note}</Text>
         )}
       </View>

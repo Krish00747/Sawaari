@@ -18,7 +18,9 @@ The same app runs in one of two modes, picked on first launch:
 There are two ways to fire a notification:
 
 - **Remote cue (director → rider):** sent through Expo's free push service. Needs internet on both phones.
-- **Offline timer (rider phone only):** scheduled from the crew panel. It fires after N seconds with no network, so it works as the backup on location. Only this mode can change the notification colour per message, because Android only allows a custom colour on notifications the app creates itself.
+- **Offline timer (rider phone only):** scheduled from the crew panel. It fires after N seconds with no network, so it works as the backup on location.
+
+Both phones keep an editable library of messages (pre-loaded with the script's notifications) and an editable rider dashboard. The director can send dashboard changes to the rider phone. Android can't colour a remote push, so when the rider app is open the app hides the incoming push and re-shows it locally in the chosen colour.
 
 ## Rebranding
 
@@ -46,9 +48,10 @@ Edit the file, commit, and a new APK appears under **Releases** about 15 minutes
 App.tsx              mode picker + routing
 src/RiderHome.tsx    on-camera screen + hidden crew panel
 src/RiderDashboard.tsx  struggling-rider dashboard (earnings, dues, orders)
-src/mockData.ts      all fake dashboard numbers — edit for the scene
-src/Director.tsx     cue sender with countdown
-src/Composer.tsx     shared message editor
+src/defaults.ts      the template: script messages + dashboard numbers
+src/Director.tsx     tabs: Send / Messages / Dashboard
+src/editors/         message, dashboard and order editors
+src/useStored.ts     saves edits on the phone
 src/notify.ts        channels, permissions, local schedule, remote send (timeout + retry)
 src/validate.ts      input checks: rider code, hex colour, lengths, delay
 src/ErrorBoundary.tsx  crash screen with reset instead of app close
