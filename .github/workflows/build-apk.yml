@@ -39,12 +39,17 @@ jobs:
 
       - name: Build the APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
-      - name: Name the APK
+      - name: Sign and name the APK
         run: |
           NAME=$(node -p "require('./brand.config.json').appName.replace(/\s+/g,'-')")
-          cp android/app/build/outputs/apk/release/app-release.apk "$NAME-${{ github.run_number }}.apk"
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" sign --ks signing/sawaari.jks --ks-key-alias sawaari \
+            --ks-pass pass:sawaari123 --key-pass pass:sawaari123 \
+            --out "$NAME-${{ github.run_number }}.apk" \
+            android/app/build/outputs/apk/release/app-release.apk
+          "$APKSIGNER" verify --print-certs "$NAME-${{ github.run_number }}.apk"
           echo "APK=$NAME-${{ github.run_number }}.apk" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4

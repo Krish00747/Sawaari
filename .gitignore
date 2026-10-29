@@ -43,3 +43,4 @@ yarn-error.*
 # Generated native projects (built in CI)
 /android
 /ios
+!signing/sawaari.jks
