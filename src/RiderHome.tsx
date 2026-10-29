@@ -6,6 +6,7 @@ import { brand } from './brand';
 import { Composer } from './Composer';
 import { cancelAllLocal, getRiderCode, scheduleLocal } from './notify';
 import { PermissionWarning } from './PermissionWarning';
+import { RiderDashboard } from './RiderDashboard';
 import { Button, C, Card, s } from './ui';
 
 /** What the actor sees on camera. Long-press the logo to open the crew panel. */
@@ -26,7 +27,8 @@ export function RiderHome({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Pressable
             onLongPress={() => setCrewOpen(true)}
-            delayLongPress={800}
+            delayLongPress={600}
+            hitSlop={12}
             accessibilityLabel={`${brand.companyName} logo`}
           >
             <Image source={require('../assets/icon.png')} style={{ width: 40, height: 40, borderRadius: 10 }} />
@@ -60,18 +62,7 @@ export function RiderHome({
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
-        <Card>
-          <Text style={s.h2}>{online ? 'Looking for orders near you…' : 'Go online to get orders'}</Text>
-          <Text style={s.p}>Stay on the main road. New orders will appear as a notification.</Text>
-        </Card>
-        <Card>
-          <Text style={s.h2}>Today</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Stat label="Orders" value="0" />
-            <Stat label="Hours online" value="0.0" />
-            <Stat label="Earnings" value="₹0" />
-          </View>
-        </Card>
+        <RiderDashboard online={online} />
       </ScrollView>
 
       <CrewPanel
@@ -84,14 +75,6 @@ export function RiderHome({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ gap: 2 }}>
-      <Text style={{ fontSize: 22, fontWeight: '800', color: C.ink }}>{value}</Text>
-      <Text style={{ fontSize: 13, color: C.muted }}>{label}</Text>
-    </View>
-  );
-}
 
 function CrewPanel({
   visible,

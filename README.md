@@ -45,6 +45,8 @@ Edit the file, commit, and a new APK appears under **Releases** about 15 minutes
 ```
 App.tsx              mode picker + routing
 src/RiderHome.tsx    on-camera screen + hidden crew panel
+src/RiderDashboard.tsx  struggling-rider dashboard (earnings, dues, orders)
+src/mockData.ts      all fake dashboard numbers — edit for the scene
 src/Director.tsx     cue sender with countdown
 src/Composer.tsx     shared message editor
 src/notify.ts        channels, permissions, local schedule, remote send (timeout + retry)

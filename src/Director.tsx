@@ -91,9 +91,12 @@ export function Director({
 
   return (
     <ScrollView contentContainerStyle={{ padding: 20, paddingTop: insets.top + 20, gap: 16, backgroundColor: C.bg }}>
-      <View style={{ gap: 4 }}>
-        <Text style={s.h1}>Director</Text>
-        <Text style={s.p}>Sends a {brand.appName} notification to the rider phone.</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={s.h1}>Director</Text>
+          <Text style={s.p}>Sends a {brand.appName} notification to the rider phone.</Text>
+        </View>
+        <Button label="Rider mode" kind="ghost" onPress={onSwitchMode} />
       </View>
       {permissionDenied && <PermissionWarning />}
 
