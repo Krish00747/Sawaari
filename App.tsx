@@ -1,20 +1,29 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { AppState, Image, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { brand } from './src/brand';
 import { Director } from './src/Director';
-import { setupNotifications } from './src/notify';
+import { ErrorBoundary } from './src/ErrorBoundary';
+import { hasPermission, setupNotifications } from './src/notify';
 import { RiderHome } from './src/RiderHome';
 import { Mode, store } from './src/storage';
 import { Button, C, s } from './src/ui';
 
 export default function App() {
   const [mode, setMode] = useState<Mode | null | undefined>(undefined);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   useEffect(() => {
-    setupNotifications();
+    setupNotifications()
+      .then((granted) => setPermissionDenied(!granted))
+      .catch(() => setPermissionDenied(true));
     store.getMode().then(setMode);
+    // Re-check when returning from Settings so the warning clears by itself.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') hasPermission().then((ok) => setPermissionDenied(!ok));
+    });
+    return () => sub.remove();
   }, []);
 
   const choose = (m: Mode | null) => {
@@ -24,16 +33,18 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style={mode === 'rider' ? 'light' : 'dark'} />
-      {mode === undefined ? (
-        <View style={{ flex: 1, backgroundColor: C.primary }} />
-      ) : mode === 'rider' ? (
-        <RiderHome onSwitchMode={() => choose('director')} />
-      ) : mode === 'director' ? (
-        <Director onSwitchMode={() => choose('rider')} />
-      ) : (
-        <ModePicker onPick={choose} />
-      )}
+      <ErrorBoundary>
+        <StatusBar style={mode === 'rider' ? 'light' : 'dark'} />
+        {mode === undefined ? (
+          <View style={{ flex: 1, backgroundColor: C.primary }} />
+        ) : mode === 'rider' ? (
+          <RiderHome onSwitchMode={() => choose('director')} permissionDenied={permissionDenied} />
+        ) : mode === 'director' ? (
+          <Director onSwitchMode={() => choose('rider')} permissionDenied={permissionDenied} />
+        ) : (
+          <ModePicker onPick={choose} />
+        )}
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

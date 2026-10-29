@@ -5,10 +5,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brand } from './brand';
 import { Composer } from './Composer';
 import { cancelAllLocal, getRiderCode, scheduleLocal } from './notify';
+import { PermissionWarning } from './PermissionWarning';
 import { Button, C, Card, s } from './ui';
 
 /** What the actor sees on camera. Long-press the logo to open the crew panel. */
-export function RiderHome({ onSwitchMode }: { onSwitchMode: () => void }) {
+export function RiderHome({
+  onSwitchMode,
+  permissionDenied,
+}: {
+  onSwitchMode: () => void;
+  permissionDenied: boolean;
+}) {
   const insets = useSafeAreaInsets();
   const [online, setOnline] = useState(true);
   const [crewOpen, setCrewOpen] = useState(false);
@@ -67,7 +74,12 @@ export function RiderHome({ onSwitchMode }: { onSwitchMode: () => void }) {
         </Card>
       </ScrollView>
 
-      <CrewPanel visible={crewOpen} onClose={() => setCrewOpen(false)} onSwitchMode={onSwitchMode} />
+      <CrewPanel
+        visible={crewOpen}
+        onClose={() => setCrewOpen(false)}
+        onSwitchMode={onSwitchMode}
+        permissionDenied={permissionDenied}
+      />
     </View>
   );
 }
@@ -85,21 +97,30 @@ function CrewPanel({
   visible,
   onClose,
   onSwitchMode,
+  permissionDenied,
 }: {
   visible: boolean;
   onClose: () => void;
   onSwitchMode: () => void;
+  permissionDenied: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const [code, setCode] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [timerMsg, setTimerMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    if (visible) setTimerMsg(null);
+  }, [visible]);
 
   useEffect(() => {
     if (!visible || code) return;
+    setCodeError(null);
     getRiderCode()
       .then(setCode)
       .catch((e: Error) => setCodeError(e.message));
-  }, [visible, code]);
+  }, [visible, code, attempt]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -108,13 +129,15 @@ function CrewPanel({
           <Text style={s.h1}>Crew panel</Text>
           <Button label="Close" kind="ghost" onPress={onClose} />
         </View>
+        {permissionDenied && <PermissionWarning />}
 
         <Card>
           <Text style={s.h2}>1 · Pair with the director's phone</Text>
           <Text style={s.p}>Send this rider code to the director phone and paste it there once.</Text>
           <Text selectable style={{ fontFamily: 'monospace', fontSize: 13, color: C.ink }}>
-            {code ?? codeError ?? 'Getting code…'}
+            {code ?? (codeError ? `Couldn't get code — ${codeError}` : 'Getting code…')}
           </Text>
+          {codeError && <Button label="Try again" kind="secondary" onPress={() => setAttempt((n) => n + 1)} />}
           {code && (
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
@@ -144,11 +167,28 @@ function CrewPanel({
             showImage={false}
             actionLabel={(c) => `Fire in ${c.delaySeconds}s`}
             onSubmit={async (cue) => {
-              await scheduleLocal(cue);
-              onClose();
+              try {
+                await scheduleLocal(cue);
+                setTimerMsg({ text: `Timer set ✓ fires in ${Math.max(1, cue.delaySeconds)}s. Closing…`, ok: true });
+                setTimeout(onClose, 1200);
+              } catch (e) {
+                setTimerMsg({ text: `Couldn't set timer — ${(e as Error).message}`, ok: false });
+              }
             }}
           />
-          <Button label="Cancel pending timers" kind="ghost" onPress={() => cancelAllLocal()} />
+          {timerMsg && (
+            <Text accessibilityLiveRegion="polite" style={{ color: timerMsg.ok ? C.ok : C.danger, fontWeight: '600' }}>
+              {timerMsg.text}
+            </Text>
+          )}
+          <Button
+            label="Cancel pending timers"
+            kind="ghost"
+            onPress={async () => {
+              await cancelAllLocal().catch(() => undefined);
+              setTimerMsg({ text: 'All pending timers cancelled.', ok: true });
+            }}
+          />
         </Card>
 
         <Button

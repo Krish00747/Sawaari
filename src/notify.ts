@@ -42,6 +42,14 @@ export async function setupNotifications(): Promise<boolean> {
   return asked.granted;
 }
 
+export async function hasPermission(): Promise<boolean> {
+  try {
+    return (await Notifications.getPermissionsAsync()).granted;
+  } catch {
+    return false;
+  }
+}
+
 /** The address other phones use to reach this one. */
 export async function getRiderCode(): Promise<string> {
   if (!Device.isDevice) throw new Error('Push only works on a real phone, not an emulator.');
@@ -74,25 +82,64 @@ export async function cancelAllLocal() {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
-/** Sends to the rider phone through Expo's free push service. */
+type PushTicket = { status: 'ok' | 'error'; message?: string; details?: { error?: string } };
+type PushResponse = { data?: PushTicket; errors?: { message: string }[] };
+
+// Plain-language versions of Expo's error codes.
+const PUSH_ERRORS: Record<string, string> = {
+  DeviceNotRegistered: 'the rider phone is no longer registered — reopen the app there and re-share its code',
+  InvalidCredentials: 'Firebase key not set up on expo.dev (Credentials → FCM V1)',
+  MessageTooBig: 'message is too long',
+  MessageRateExceeded: 'too many messages too fast — wait a few seconds',
+};
+
+async function postOnce(payload: object, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Sends to the rider phone through Expo's free push service.
+ * Retries once on a network failure or timeout; Expo rejections are not retried.
+ * Success means Expo accepted it, which almost always means it arrives within seconds.
+ */
 export async function sendRemote(riderCode: string, cue: Cue): Promise<void> {
-  const res = await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      to: riderCode.trim(),
-      title: cue.title,
-      body: cue.body,
-      sound: 'default',
-      priority: 'high',
-      channelId: CHANNEL_ID,
-      ...(cue.imageUrl ? { richContent: { image: cue.imageUrl } } : {}),
-    }),
-  });
-  const json = await res.json().catch(() => null);
+  const payload = {
+    to: riderCode,
+    title: cue.title,
+    body: cue.body,
+    sound: 'default',
+    priority: 'high',
+    channelId: CHANNEL_ID,
+    ...(cue.imageUrl ? { richContent: { image: cue.imageUrl } } : {}),
+  };
+
+  let res: Response;
+  try {
+    res = await postOnce(payload, 10000);
+  } catch {
+    try {
+      res = await postOnce(payload, 10000);
+    } catch {
+      throw new Error('no internet on this phone, or the push service timed out. Check signal and try again.');
+    }
+  }
+
+  const json = (await res.json().catch(() => null)) as PushResponse | null;
   const ticket = json?.data;
   if (!res.ok || ticket?.status === 'error') {
-    const reason = ticket?.details?.error ?? ticket?.message ?? json?.errors?.[0]?.message;
-    throw new Error(reason ? String(reason) : `Push service replied ${res.status}`);
+    const code = ticket?.details?.error;
+    const reason = (code && PUSH_ERRORS[code]) ?? ticket?.message ?? json?.errors?.[0]?.message;
+    throw new Error(reason ?? `push service replied ${res.status}`);
   }
 }

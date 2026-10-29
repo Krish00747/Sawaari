@@ -47,7 +47,9 @@ App.tsx              mode picker + routing
 src/RiderHome.tsx    on-camera screen + hidden crew panel
 src/Director.tsx     cue sender with countdown
 src/Composer.tsx     shared message editor
-src/notify.ts        channels, permissions, local schedule, remote send
+src/notify.ts        channels, permissions, local schedule, remote send (timeout + retry)
+src/validate.ts      input checks: rider code, hex colour, lengths, delay
+src/ErrorBoundary.tsx  crash screen with reset instead of app close
 brand.config.json    name, colours, rider name
 .github/workflows/   APK build on GitHub Actions
 ```

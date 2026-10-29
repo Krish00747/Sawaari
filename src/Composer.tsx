@@ -4,6 +4,7 @@ import { brand, swatches } from './brand';
 import { Cue } from './notify';
 import { store } from './storage';
 import { Button, C, Field, s } from './ui';
+import { clampDelay, isHttpsUrl, LIMITS, normaliseHex } from './validate';
 
 const DEFAULT_CUE: Cue = {
   title: 'New order · ₹82',
@@ -38,17 +39,41 @@ export function Composer({
 
   const update = (patch: Partial<Cue>) => setCue((c) => ({ ...c, ...patch }));
 
+  const color = normaliseHex(cue.color);
+  const imageOk = !showImage || !cue.imageUrl?.trim() || isHttpsUrl(cue.imageUrl);
+  const problem = !cue.title.trim()
+    ? 'Add a title.'
+    : showColor && !color
+      ? 'Colour must be a hex code like #14367A.'
+      : !imageOk
+        ? 'Image link must start with https://'
+        : null;
+
   const submit = () => {
-    store.setLastCue(cue);
-    onSubmit(cue);
+    if (problem) return;
+    const clean: Cue = {
+      title: cue.title.trim(),
+      body: cue.body.trim(),
+      color: color ?? brand.notificationColor,
+      delaySeconds: clampDelay(cue.delaySeconds),
+      imageUrl: cue.imageUrl?.trim() || undefined,
+    };
+    store.setLastCue(clean);
+    onSubmit(clean);
   };
 
   return (
     <View style={{ gap: 14 }}>
-      <Field label="Title" value={cue.title} onChangeText={(title) => update({ title })} />
       <Field
-        label="Message"
+        label={`Title (${cue.title.length}/${LIMITS.title})`}
+        value={cue.title}
+        maxLength={LIMITS.title}
+        onChangeText={(title) => update({ title })}
+      />
+      <Field
+        label={`Message (${cue.body.length}/${LIMITS.body})`}
         value={cue.body}
+        maxLength={LIMITS.body}
         onChangeText={(body) => update({ body })}
         multiline
         style={{ minHeight: 90, textAlignVertical: 'top' }}
@@ -94,12 +119,14 @@ export function Composer({
         />
       )}
       <Field
-        label="Delay (seconds)"
+        label={`Delay in seconds (max ${LIMITS.maxDelaySeconds})`}
         value={String(cue.delaySeconds)}
         keyboardType="number-pad"
-        onChangeText={(t) => update({ delaySeconds: Number(t.replace(/[^0-9]/g, '')) || 0 })}
+        maxLength={4}
+        onChangeText={(t) => update({ delaySeconds: clampDelay(Number(t.replace(/[^0-9]/g, '')) || 0) })}
       />
-      <Button label={actionLabel(cue)} onPress={submit} disabled={busy || !cue.title.trim()} />
+      {problem && <Text style={{ color: C.danger, fontWeight: '600' }}>{problem}</Text>}
+      <Button label={actionLabel(cue)} onPress={submit} disabled={busy || !!problem} />
     </View>
   );
 }
