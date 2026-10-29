@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "251098749156",
+    "project_id": "com-sawaari-rider",
+    "storage_bucket": "com-sawaari-rider.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:251098749156:android:5483f8ad6d9d6cfe28f4f1",
+        "android_client_info": {
+          "package_name": "com.sawaari.rider"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBku_yR38HsIvmHUiChjVjnBZrL1cJVnCI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

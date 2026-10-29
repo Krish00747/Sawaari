@@ -1,0 +1,61 @@
+name: Build APK
+
+# Builds an installable Android APK right here on GitHub — no extra accounts or tokens.
+# Runs on every push to main, or by hand from the Actions tab ("Run workflow").
+# The APK appears under Releases, ready to download on a phone.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: npm ci
+
+      - name: Generate the Android project from app.config.ts
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 1
+
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Name the APK
+        run: |
+          NAME=$(node -p "require('./brand.config.json').appName.replace(/\s+/g,'-')")
+          cp android/app/build/outputs/apk/release/app-release.apk "$NAME-${{ github.run_number }}.apk"
+          echo "APK=$NAME-${{ github.run_number }}.apk" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ${{ env.APK }}
+
+      - name: Publish as a GitHub Release (easy phone download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: Install this APK on both phones. Commit ${{ github.sha }}.
+          files: ${{ env.APK }}

@@ -1,1 +1,59 @@
 # Sawaari
+
+<img src="assets/brand/icon-preview.png" width="96" align="right" alt="Sawaari app icon">
+
+A fake delivery-rider app built as a prop for a short film. One phone (the rider, on camera) receives a delivery-style notification. The message, timing and look are controlled by the crew.
+
+It is a small, real Android app: React Native + Expo, push notifications through Expo's push service and Firebase Cloud Messaging, and a GitHub Actions pipeline that builds the APK on every push.
+
+## How it works
+
+The same app runs in one of two modes, picked on first launch:
+
+| Mode | Who holds it | What it does |
+|---|---|---|
+| **Rider** | The actor | A clean, branded rider home screen for the camera. Long-press the logo to open a hidden **crew panel**. |
+| **Director** | The crew | Writes the title and message, then sends it to the rider phone instantly or after a countdown. |
+
+There are two ways to fire a notification:
+
+- **Remote cue (director → rider):** sent through Expo's free push service. Needs internet on both phones.
+- **Offline timer (rider phone only):** scheduled from the crew panel. It fires after N seconds with no network, so it works as the backup on location. Only this mode can change the notification colour per message, because Android only allows a custom colour on notifications the app creates itself.
+
+## Rebranding
+
+Everything about the app's identity is in [`brand.config.json`](brand.config.json):
+
+```json
+{
+  "appName": "Sawaari Rider",
+  "companyName": "Sawaari",
+  "tagline": "Har sawaari, sahi jagah.",
+  "primaryColor": "#14367A",
+  "lightColor": "#BFDDFF",
+  "notificationColor": "#14367A",
+  "riderName": "Vikram"
+}
+```
+
+To change the icon, replace the PNGs in `assets/`. They're generated from the SVG sources in `assets/brand/`.
+
+Edit the file, commit, and a new APK appears under **Releases** about 15 minutes later.
+
+## Project structure
+
+```
+App.tsx              mode picker + routing
+src/RiderHome.tsx    on-camera screen + hidden crew panel
+src/Director.tsx     cue sender with countdown
+src/Composer.tsx     shared message editor
+src/notify.ts        channels, permissions, local schedule, remote send
+brand.config.json    name, colours, rider name
+.github/workflows/   APK build on GitHub Actions
+```
+
+## Building
+
+There's nothing to install locally. GitHub Actions runs `expo prebuild` and Gradle and publishes `Sawaari-Rider-<n>.apk` as a release. To develop locally: `npm install`, then `npx expo run:android` with a phone connected.
+
+Remote push needs an Expo project ID in `brand.config.json` (`easProjectId`), plus the Firebase FCM V1 service-account key uploaded to that project's credentials on expo.dev.
