@@ -18,9 +18,24 @@ const config: ExpoConfig = {
       monochromeImage: './assets/android-icon-monochrome.png',
       backgroundColor: brand.primaryColor,
     },
-    permissions: ['VIBRATE'],
+    permissions: ['VIBRATE', 'POST_NOTIFICATIONS', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
   },
   plugins: [
+    [
+      'expo-notifications',
+      {
+        icon: './assets/notification-icon.png',
+        color: brand.notificationColor,
+        defaultChannel: 'orders',
+      },
+    ],
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission: 'Sawaari uses your location to move the map while you ride.',
+      },
+    ],
+    'expo-font',
     [
       'expo-splash-screen',
       {

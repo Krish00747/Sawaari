@@ -1,10 +1,11 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Text, Vibration, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brand } from '../brand';
 import { AlertItem, LiveState } from '../show/types';
 import { BikeGlyph } from './bits';
-import { N, TAB, TONE } from './theme';
+import { F, GRAD, L, shadow, t, TAB } from './theme';
 
 /** In-app notification that drops in over any screen when the crew fires a message. */
 export function AlertBanner({ live, vibrate }: { live: LiveState; vibrate: boolean }) {
@@ -30,7 +31,27 @@ export function AlertBanner({ live, vibrate }: { live: LiveState; vibrate: boole
   }, [live.newAlertId]);
 
   if (!item) return null;
-  const t = TONE[item.tone];
+  const danger = item.tone === 'danger';
+  const warn = item.tone === 'warn';
+  const sub = danger ? 'rgba(255,255,255,0.9)' : L.ink2;
+  const meta = danger ? 'rgba(255,255,255,0.75)' : L.muted;
+
+  const body = (
+    <View style={{ flexDirection: 'row', gap: 12, padding: 14 }}>
+      <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: danger ? '#FFFFFF' : warn ? L.amberFill : L.brand, alignItems: 'center', justifyContent: 'center' }}>
+        {item.tone === 'info' ? <BikeGlyph size={32} /> : <Text style={t(F.d8, 22, danger ? L.red : L.ink)}>!</Text>}
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={t(F.b7, 12, meta)}>{brand.appName}</Text>
+          <Text style={[TAB, t(F.b7, 12, meta)]}>{item.clock}</Text>
+        </View>
+        <Text style={t(F.d7, 17, danger ? '#FFFFFF' : warn ? L.amber : L.brand)}>{item.title}</Text>
+        {!!item.body && <Text style={t(F.b6, 14, sub, { lineHeight: 19 })}>{item.body}</Text>}
+      </View>
+    </View>
+  );
+
   return (
     <Animated.View
       accessibilityLiveRegion="assertive"
@@ -44,33 +65,14 @@ export function AlertBanner({ live, vibrate }: { live: LiveState; vibrate: boole
         opacity: y.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 1] }),
       }}
     >
-      <View
-        style={{
-          flexDirection: 'row',
-          gap: 12,
-          padding: 14,
-          borderRadius: 22,
-          backgroundColor: '#0E1A36',
-          borderWidth: 1.5,
-          borderColor: t.line,
-          shadowColor: '#000',
-          shadowOpacity: 0.5,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 12,
-        }}
-      >
-        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: item.tone === 'info' ? N.brand : t.fg, alignItems: 'center', justifyContent: 'center' }}>
-          {item.tone === 'info' ? <BikeGlyph size={30} /> : <Text style={{ color: N.bg, fontWeight: '900', fontSize: 22 }}>!</Text>}
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ color: N.muted, fontSize: 12, fontWeight: '700' }}>{brand.appName}</Text>
-            <Text style={[TAB, { color: N.faint, fontSize: 12, fontWeight: '700' }]}>{item.clock}</Text>
-          </View>
-          <Text style={{ color: t.fg, fontSize: 17, fontWeight: '900' }}>{item.title}</Text>
-          {!!item.body && <Text style={{ color: '#E2E8F4', fontSize: 14, lineHeight: 19 }}>{item.body}</Text>}
-        </View>
+      <View style={[{ borderRadius: 22, overflow: 'hidden', backgroundColor: '#FFFFFF' }, shadow]}>
+        {danger ? (
+          <LinearGradient colors={GRAD.red} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            {body}
+          </LinearGradient>
+        ) : (
+          <View style={{ backgroundColor: warn ? '#FFF6E4' : '#FFFFFF' }}>{body}</View>
+        )}
       </View>
     </Animated.View>
   );

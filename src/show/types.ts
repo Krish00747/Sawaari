@@ -76,7 +76,9 @@ export type Show = {
 
 export type AlertItem = { id: string; title: string; body: string; tone: Tone; clock: string };
 
-export type Screen = 'dashboard' | 'offer' | 'ride' | 'arrival';
+export type Screen = 'dashboard' | 'offer' | 'ride' | 'arrival' | 'outcome';
+export type Entry = 'takeover' | 'notification';
+export type Outcome = '' | 'cancelled' | 'delivered';
 
 /** What the rider phone shows right now. Written by whoever fires a cue. */
 export type LiveState = {
@@ -85,6 +87,8 @@ export type LiveState = {
   clock: string; // story clock at clockAt, e.g. "2:16 AM"
   clockAt: number; // ms
   screen: Screen;
+  entry: Entry; // how the order request arrived
+  outcome: Outcome; // set when the rider cancels or delivers
   cue: Cue | null; // the cue that set the current screen
   lastCueId: string; // the last cue fired, of any kind
   alerts: AlertItem[]; // newest first

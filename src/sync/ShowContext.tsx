@@ -13,14 +13,17 @@ import {
 } from 'firebase/database';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import googleServices from '../../google-services.json';
-import { applyCue, cleanLive, cleanShow, forFirebase, INITIAL_LIVE, newId, nextCue, nextScreenCue } from '../show/live';
+import { applyCue, cleanLive, cleanShow, forFirebase, INITIAL_LIVE, newId, nextCue, nextScreenCue, withOutcome } from '../show/live';
+import { getPushToken, scheduleOfferNotification, sendOfferPush, setupNotifications } from './push';
 import { TEMPLATE } from '../show/template';
-import { Cue, LiveState, Show } from '../show/types';
+import { Cue, Entry, LiveState, Show } from '../show/types';
 
 export type Mode = 'rider' | 'director';
-export type Device = { id: string; mode: Mode };
+export type Device = { id: string; mode: Mode; push?: string };
 export type RiderNote = { text: string; at: number };
-export type Pending = { cue: Cue; fireAt: number } | null;
+export type How = 'fire' | 'notify';
+export type Pending = { cue: Cue; fireAt: number; how: How } | null;
+export type Status = { text: string; ok: boolean; at: number } | null;
 
 const PROJECT_ID = googleServices.project_info.project_id;
 export const DEFAULT_DB_URL = `https://${PROJECT_ID}-default-rtdb.firebaseio.com`;
@@ -79,11 +82,13 @@ type Ctx = {
   updateShow: (next: Show) => void;
   resetShow: () => void;
   live: LiveState;
-  fire: (cue: Cue) => void;
+  fire: (cue: Cue, entry?: Entry) => void;
   advance: () => boolean;
+  setOutcome: (o: 'cancelled' | 'delivered') => void;
+  notifyStatus: Status;
   nextUp: Cue | null;
   pending: Pending;
-  schedule: (cue: Cue, delaySeconds: number) => void;
+  schedule: (cue: Cue, delaySeconds: number, how?: How) => void;
   cancelPending: () => void;
   room: string | null;
   online: boolean;
@@ -118,6 +123,8 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
   const [pending, setPending] = useState<Pending>(null);
   const [dbUrl, setDbUrlState] = useState(DEFAULT_DB_URL);
   const [deviceId, setDeviceId] = useState('');
+  const [pushToken, setPushToken] = useState<string | null>(null);
+  const [notifyStatus, setNotifyStatus] = useState<Status>(null);
 
   const showRef = useRef(show);
   const liveRef = useRef(live);
@@ -153,6 +160,12 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
       setReady(true);
     })();
   }, []);
+
+  // ---- Rider phone: notification permission and push address ----
+  useEffect(() => {
+    if (mode !== 'rider') return;
+    setupNotifications().then((ok) => (ok ? getPushToken() : null)).then(setPushToken);
+  }, [mode]);
 
   // ---- Live room subscription ----
   useEffect(() => {
@@ -192,8 +205,10 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
       onValue(
         ref(d, `${base}/devices`),
         (snap) => {
-          const v = (snap.val() ?? {}) as Record<string, { mode?: Mode }>;
-          setDevices(Object.entries(v).map(([id, x]) => ({ id, mode: x?.mode === 'director' ? 'director' : 'rider' })));
+          const v = (snap.val() ?? {}) as Record<string, { mode?: Mode; push?: string }>;
+          setDevices(
+            Object.entries(v).map(([id, x]) => ({ id, mode: x?.mode === 'director' ? 'director' : 'rider', push: typeof x?.push === 'string' ? x.push : undefined })),
+          );
         },
         onErr,
       ),
@@ -208,7 +223,7 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
         if (up) {
           onDisconnect(presence)
             .remove()
-            .then(() => set(presence, { mode, at: Date.now() }))
+            .then(() => set(presence, forFirebase({ mode, at: Date.now(), push: pushToken ?? undefined })))
             .catch(onErr);
         }
       }),
@@ -217,7 +232,7 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
       unsubs.forEach((u) => u());
       remove(presence).catch(() => undefined);
     };
-  }, [room, deviceId, mode, db]);
+  }, [room, deviceId, mode, db, pushToken]);
 
   // ---- Show edits ----
   const pushShow = useCallback(
@@ -259,8 +274,32 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
   );
 
   const fire = useCallback(
-    (cue: Cue) => commitLive(applyCue(liveRef.current, cue, showRef.current.order)),
+    (cue: Cue, entry: Entry = 'takeover') => commitLive(applyCue(liveRef.current, cue, showRef.current.order, entry)),
     [commitLive],
+  );
+
+  const setOutcome = useCallback((o: 'cancelled' | 'delivered') => commitLive(withOutcome(liveRef.current, o)), [commitLive]);
+
+  const devicesRef = useRef(devices);
+  devicesRef.current = devices;
+
+  /** Order request as a phone notification: pushed to the rider phone (director) or scheduled here (rider). */
+  const notify = useCallback(
+    async (cue: Cue, delaySeconds: number) => {
+      try {
+        if (mode === 'rider') {
+          await scheduleOfferNotification(cue, showRef.current.order, delaySeconds);
+          setNotifyStatus({ text: delaySeconds ? `Notification in ${delaySeconds}s` : 'Notification sent', ok: true, at: Date.now() });
+        } else {
+          const tokens = devicesRef.current.filter((d) => d.mode === 'rider' && d.push).map((d) => d.push as string);
+          await sendOfferPush(tokens, cue, showRef.current.order);
+          setNotifyStatus({ text: 'Notification sent to the rider phone', ok: true, at: Date.now() });
+        }
+      } catch (e) {
+        setNotifyStatus({ text: `Notification not sent — ${(e as Error).message}`, ok: false, at: Date.now() });
+      }
+    },
+    [mode],
   );
 
   /** Moves to the next screen cue (used by the actor's swipes). */
@@ -283,13 +322,17 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
 
   // ---- Delayed fire (keeps running when panels close) ----
   const schedule = useCallback(
-    (cue: Cue, delaySeconds: number) => {
-      if (delaySeconds <= 0) {
+    (cue: Cue, delaySeconds: number, how: How = 'fire') => {
+      // A rider phone hands delayed notifications to Android, so they fire even in the background.
+      if (how === 'notify' && (delaySeconds <= 0 || mode === 'rider')) {
+        setPending(null);
+        notify(cue, delaySeconds);
+      } else if (delaySeconds <= 0) {
         setPending(null);
         fire(cue);
-      } else setPending({ cue, fireAt: Date.now() + delaySeconds * 1000 });
+      } else setPending({ cue, fireAt: Date.now() + delaySeconds * 1000, how });
     },
-    [fire],
+    [fire, notify, mode],
   );
   const cancelPending = useCallback(() => setPending(null), []);
 
@@ -297,10 +340,11 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
     if (!pending) return;
     const t = setTimeout(() => {
       setPending(null);
-      fire(pending.cue);
+      if (pending.how === 'notify') notify(pending.cue, 0);
+      else fire(pending.cue);
     }, Math.max(0, pending.fireAt - Date.now()));
     return () => clearTimeout(t);
-  }, [pending, fire]);
+  }, [pending, fire, notify]);
 
   // ---- Pairing ----
   const createRoom = useCallback(async (): Promise<string> => {
@@ -363,6 +407,8 @@ export function ShowProvider({ mode, children }: { mode: Mode; children: ReactNo
     live,
     fire,
     advance,
+    setOutcome,
+    notifyStatus,
     nextUp,
     pending,
     schedule,

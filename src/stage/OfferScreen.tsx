@@ -1,165 +1,238 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, Text, Vibration, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, Text, useWindowDimensions, Vibration, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brand } from '../brand';
-import { Order } from '../show/types';
-import { BikeGlyph, CountdownRing, LiveDot, RollingRupee, StoryClock, SwipeButton } from './bits';
-import { NightMap } from './NightMap';
-import { N, TAB } from './theme';
+import { rupee } from '../show/live';
+import { Entry, Order } from '../show/types';
+import { BikeGlyph, CountdownRing, LiveDot, RollingRupee, StoryClock } from './bits';
+import { F, GRAD, L, shadow, t, TAB } from './theme';
 
-/** Full-screen incoming order: accept with a swipe, or reject. */
+/**
+ * The order request. Arrives either by taking over the dashboard (a circle grows out of the
+ * "Online" pill) or from a notification tap. Accept morphs into "Order accepted", then the ride starts.
+ */
 export function OfferScreen({
   order,
   clock,
-  onAccept,
+  entry,
+  fresh,
+  onAccepted,
+  onDone,
   onReject,
   onCrew,
 }: {
   order: Order;
   clock: string;
-  onAccept: () => void;
+  entry: Entry;
+  fresh: boolean;
+  onAccepted: () => void;
+  onDone: () => void;
   onReject: () => void;
   onCrew: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const enter = useRef(new Animated.Value(0)).current;
-  const card = useRef(new Animated.Value(0)).current;
-  const rings = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
-  const reveal = useRef(new Animated.Value(0)).current;
+  const { width, height } = useWindowDimensions();
+  const [accepted, setAccepted] = useState(false);
+  const reveal = useRef(new Animated.Value(fresh ? 0 : 1)).current;
+  const content = useRef(new Animated.Value(fresh ? 0 : 1)).current;
+  const morph = useRef(new Animated.Value(0)).current;
+  const check = useRef(new Animated.Value(0)).current;
+
+  // Circle grows from the dashboard's "Online" pill.
+  const ox = 120;
+  const oy = insets.top + 168;
+  const radius = Math.hypot(Math.max(ox, width - ox), Math.max(oy, height - oy));
 
   useEffect(() => {
+    const takeover = entry === 'takeover';
     Animated.sequence([
-      Animated.timing(enter, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.spring(card, { toValue: 1, useNativeDriver: true, damping: 16, stiffness: 140 }),
+      Animated.timing(reveal, { toValue: 1, duration: fresh ? (takeover ? 620 : 320) : 0, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(content, { toValue: 1, useNativeDriver: true, damping: 16, stiffness: 140 }),
     ]).start();
-    Animated.timing(reveal, { toValue: 1, duration: 1400, delay: 700, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }).start();
-    const loops = rings.map((v, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 600),
-          Animated.timing(v, { toValue: 1, duration: 1800, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ]),
-      ),
-    );
-    loops.forEach((l) => l.start());
     if (order.vibrate) Vibration.vibrate([0, 450, 350, 450, 1400], true);
-    return () => {
-      loops.forEach((l) => l.stop());
-      Vibration.cancel();
-    };
+    return () => Vibration.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const stop = (fn: () => void) => () => {
+  const accept = () => {
+    if (accepted) return;
     Vibration.cancel();
-    fn();
+    if (order.vibrate) Vibration.vibrate(60);
+    setAccepted(true);
+    onAccepted();
+    Animated.parallel([
+      Animated.timing(content, { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(morph, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(check, { toValue: 1, useNativeDriver: true, damping: 9, stiffness: 130, delay: 220 }),
+    ]).start();
+    setTimeout(onDone, 2600);
   };
 
+  const reject = () => {
+    Vibration.cancel();
+    onReject();
+  };
+
+  const takeover = entry === 'takeover';
+  const circleScale = reveal.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] });
+  const slide = reveal.interpolate({ inputRange: [0, 1], outputRange: [-height * 0.15, 0] });
+
   return (
-    <View style={{ flex: 1, backgroundColor: N.bg, paddingTop: insets.top + 10, paddingBottom: insets.bottom + 16, paddingHorizontal: 18 }}>
-      {/* top bar */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: N.brand, alignItems: 'center', justifyContent: 'center' }}>
-            <BikeGlyph size={24} />
-          </View>
-          <Text style={{ color: N.text, fontWeight: '800', fontSize: 17 }}>{brand.companyName}</Text>
-        </View>
-        {!!clock && <StoryClock text={clock} onLongPress={onCrew} />}
-      </View>
+    <View style={{ flex: 1 }}>
+      {/* background: circle reveal (takeover) or slide-down (notification) */}
+      {takeover ? (
+        <>
+          <Animated.View
+            style={{ position: 'absolute', left: ox - radius, top: oy - radius, width: radius * 2, height: radius * 2, borderRadius: radius, backgroundColor: '#EEF5FF', transform: [{ scale: circleScale }] }}
+          />
+          <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: reveal.interpolate({ inputRange: [0, 0.85, 1], outputRange: [0, 0, 1] }) }}>
+            <LinearGradient colors={GRAD.morning} style={{ flex: 1 }} />
+          </Animated.View>
+        </>
+      ) : (
+        <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: reveal, transform: [{ translateY: slide }] }}>
+          <LinearGradient colors={GRAD.morning} style={{ flex: 1 }} />
+        </Animated.View>
+      )}
 
-      {/* hero */}
-      <Animated.View style={{ alignItems: 'center', marginTop: 10, opacity: enter, transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }}>
-        <View style={{ width: 96, height: 96, alignItems: 'center', justifyContent: 'center' }}>
-          {rings.map((v, i) => (
-            <Animated.View
-              key={i}
-              style={{
-                position: 'absolute',
-                width: 96,
-                height: 96,
-                borderRadius: 48,
-                borderWidth: 2,
-                borderColor: N.light,
-                opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
-                transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.7] }) }],
-              }}
-            />
-          ))}
-          <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: N.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(191,221,255,0.4)' }}>
-            <BikeGlyph size={50} />
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 14 }}>
-          <LiveDot color={N.green} size={7} />
-          <Text style={{ color: N.green, fontWeight: '800', fontSize: 13, letterSpacing: 1.4 }}>NEW ORDER REQUEST</Text>
-        </View>
-        <RollingRupee from={0} to={order.payout} duration={1300} delay={300} style={{ color: N.text, fontSize: 52, fontWeight: '900', letterSpacing: -1, marginTop: 2 }} />
-        <Text style={{ color: N.muted, fontSize: 14, marginTop: 2 }}>
-          Order {order.id} · Trip {order.tripKm} km · Pickup {order.approachKm} km
-        </Text>
-      </Animated.View>
-
-      {/* order card */}
+      {/* the request */}
       <Animated.View
-        style={{
-          flex: 1,
-          marginTop: 18,
-          backgroundColor: N.surface,
-          borderRadius: 24,
-          borderWidth: 1,
-          borderColor: N.line,
-          overflow: 'hidden',
-          opacity: card,
-          transform: [{ translateY: card.interpolate({ inputRange: [0, 1], outputRange: [60, 0] }) }],
-        }}
+        pointerEvents={accepted ? 'none' : 'auto'}
+        style={{ flex: 1, paddingTop: insets.top + 10, paddingBottom: insets.bottom + 16, paddingHorizontal: 18, opacity: content, transform: [{ translateY: content.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }] }}
       >
-        <View style={{ flex: 1, minHeight: 140 }}>
-          <NightMap showMarker={false} reveal={reveal} compact />
-          <View style={{ position: 'absolute', top: 10, right: 10 }}>
-            <View style={{ backgroundColor: 'rgba(8,18,38,0.8)', borderRadius: 40, padding: 3 }}>
-              <CountdownRing seconds={Math.max(5, order.acceptSeconds)} size={54} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+            <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: L.brand, alignItems: 'center', justifyContent: 'center' }}>
+              <BikeGlyph size={25} />
             </View>
+            <Text style={t(F.d7, 18, L.ink)}>{brand.companyName}</Text>
+          </View>
+          {!!clock && <StoryClock text={clock} onLongPress={onCrew} />}
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 22 }}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: L.greenBg, borderRadius: 999, paddingLeft: 4, paddingRight: 12, paddingVertical: 3 }}>
+              <LiveDot color={L.green} size={7} />
+              <Text style={t(F.b8, 12, L.green, { letterSpacing: 1.4 })}>NEW ORDER</Text>
+            </View>
+            <RollingRupee from={0} to={order.payout} duration={fresh ? 1300 : 0} delay={fresh ? 700 : 0} style={t(F.d8, 60, L.ink, { letterSpacing: -2, marginTop: 12 })} />
+            <Text style={t(F.b6, 15, L.muted, { marginTop: 2 })}>Estimated earnings · Order {order.id}</Text>
+          </View>
+          <View style={[{ backgroundColor: '#FFFFFF', borderRadius: 40, padding: 4 }, shadow]}>
+            <CountdownRing seconds={Math.max(5, order.acceptSeconds)} size={72} />
           </View>
         </View>
 
-        <View style={{ padding: 16, gap: 12 }}>
-          <Stop color={N.green} kind="PICKUP" name={order.pickupName} area={order.pickupArea} meta={`${order.approachKm} km`} />
-          <View style={{ marginLeft: 6, width: 2, height: 10, backgroundColor: N.line }} />
-          <Stop color={N.red} kind="DROP" name={order.dropName} area={order.dropArea} meta={`${order.tripKm} km`} />
-          {!!order.note && (
-            <View style={{ marginTop: 4, padding: 12, borderRadius: 14, backgroundColor: '#2A2210', borderWidth: 1, borderColor: 'rgba(255,181,71,0.35)', gap: 3 }}>
-              <Text style={{ color: N.amber, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }}>CUSTOMER NOTE</Text>
-              <Text style={{ color: '#FFE7BF', fontSize: 16, fontWeight: '600', fontStyle: 'italic' }}>“{order.note}”</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
+          <Stat value={`${order.tripKm} km`} label="trip" />
+          <Stat value={`${order.approachKm} km`} label="to pickup" />
+          <Stat value={`~${Math.round(order.tripKm * 2.5)} min`} label="ride" />
+        </View>
+
+        <View style={[{ marginTop: 14, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 18 }, shadow]}>
+          <Stop color={L.green} kind="Pickup" name={order.pickupName} area={order.pickupArea} />
+          <View style={{ marginLeft: 8, marginVertical: 4, height: 22, width: 2, borderLeftWidth: 2, borderStyle: 'dashed', borderColor: '#C9D6EA' }} />
+          <Stop color={L.red} kind="Drop" name={order.dropName} area={order.dropArea} square />
+          <View style={{ height: 1, backgroundColor: L.line, marginVertical: 14 }} />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Detail label="Cargo" value={order.cargo} />
+            <Detail label="Payment" value="Prepaid online" />
+          </View>
+        </View>
+
+        {!!order.note && (
+          <View style={{ marginTop: 12, flexDirection: 'row', gap: 10, padding: 14, borderRadius: 20, backgroundColor: '#FFF3D6' }}>
+            <Text style={t(F.d8, 34, L.amberFill, { lineHeight: 34, marginTop: -4 })}>“</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={t(F.b8, 11, L.amber, { letterSpacing: 1.4 })}>CUSTOMER NOTE</Text>
+              <Text style={t(F.b8, 17, '#4D3200', { marginTop: 3, lineHeight: 23 })}>{order.note}</Text>
             </View>
-          )}
+          </View>
+        )}
+
+        <View style={{ flex: 1 }} />
+
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Pressable accessibilityRole="button" onPress={reject} style={({ pressed }) => ({ flex: 1, height: 64, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#D3DDEC', alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}>
+            <Text style={t(F.d7, 17, L.ink2)}>Reject</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={accept} style={({ pressed }) => [{ flex: 2, height: 64, borderRadius: 20, overflow: 'hidden', opacity: pressed ? 0.88 : 1 }, shadow]}>
+            <LinearGradient colors={GRAD.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 }}>
+              <Text style={t(F.d8, 19, '#FFFFFF')}>Accept order</Text>
+              <Svg width={22} height={22} viewBox="0 0 24 24">
+                <Path d="M5 12h13M13 6l6 6-6 6" stroke={L.sky2} strokeWidth={2.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </LinearGradient>
+          </Pressable>
         </View>
       </Animated.View>
 
-      {/* actions */}
-      <Animated.View style={{ marginTop: 16, gap: 6, opacity: card }}>
-        <SwipeButton label="Swipe to accept" onComplete={stop(onAccept)} />
-        <Pressable accessibilityRole="button" onPress={stop(onReject)} style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: N.muted, fontWeight: '700', fontSize: 15 }}>Reject order</Text>
-        </Pressable>
-      </Animated.View>
+      {/* accepted */}
+      {accepted && (
+        <Animated.View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: morph }}>
+          <LinearGradient colors={GRAD.brand} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
+            <Animated.View style={{ width: 112, height: 112, borderRadius: 56, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', transform: [{ scale: check }] }}>
+              <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+                <Svg width={40} height={40} viewBox="0 0 24 24">
+                  <Path d="M5 12.5l4.2 4.2L19 7" stroke={L.brand2} strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+            </Animated.View>
+            <Text style={t(F.d8, 32, '#FFFFFF', { marginTop: 26 })}>Order accepted</Text>
+            <Text style={t(F.b6, 17, L.sky2, { marginTop: 8, textAlign: 'center' })}>
+              Head to {order.pickupName}, {order.pickupArea}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 26 }}>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center' }}>
+                <Text style={[TAB, t(F.d8, 20, '#FFFFFF')]}>{rupee(order.payout)}</Text>
+                <Text style={t(F.b6, 12, L.sky2)}>payout</Text>
+              </View>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center' }}>
+                <Text style={[TAB, t(F.d8, 20, '#FFFFFF')]}>{order.approachKm} km</Text>
+                <Text style={t(F.b6, 12, L.sky2)}>to pickup</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      )}
     </View>
   );
 }
 
-function Stop({ color, kind, name, area, meta }: { color: string; kind: string; name: string; area: string; meta: string }) {
+function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      <View style={{ width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: color }} />
+    <View style={{ flex: 1 }}>
+      <Text style={t(F.b7, 12, L.muted)}>{label}</Text>
+      <Text style={t(F.b8, 14, L.ink, { marginTop: 2 })} numberOfLines={2}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#D9E6F8' }}>
+      <Text style={[TAB, t(F.d7, 17, L.brand)]}>{value}</Text>
+      <Text style={t(F.b6, 12, L.muted, { marginTop: 1 })}>{label}</Text>
+    </View>
+  );
+}
+
+function Stop({ color, kind, name, area, square }: { color: string; kind: string; name: string; area: string; square?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <View style={{ width: 18, height: 18, borderRadius: square ? 5 : 9, borderWidth: 4, borderColor: color, backgroundColor: '#FFFFFF' }} />
       <View style={{ flex: 1 }}>
-        <Text style={{ color: N.faint, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }}>{kind}</Text>
-        <Text style={{ color: N.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+        <Text style={t(F.b7, 12, L.muted)}>{kind}</Text>
+        <Text style={t(F.d7, 18, L.ink, { marginTop: 1 })} numberOfLines={1}>
           {name}
-          {area ? <Text style={{ color: N.muted, fontWeight: '500' }}>{`, ${area}`}</Text> : null}
+          <Text style={t(F.b6, 15, L.muted)}>{area ? `, ${area}` : ''}</Text>
         </Text>
       </View>
-      <Text style={[TAB, { color: N.muted, fontSize: 14, fontWeight: '700' }]}>{meta}</Text>
     </View>
   );
 }

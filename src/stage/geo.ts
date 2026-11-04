@@ -73,3 +73,51 @@ export function pointAt(l: Line, t: number): Pt {
   }
   return l.pts[l.pts.length - 1];
 }
+
+// ---------- Navigation ----------
+
+/** Street name for each segment (segment i runs from point i to i+1). */
+export const ROUTE_STREETS = ['Bargad Gali', 'Ring Road', 'Ring Road', 'Ring Road', 'NH 66', 'NH 66', 'Arch Road', 'Arch Road', 'Ghat Road', 'Ghat Road'];
+export const APPROACH_STREETS = ['Pump Road', 'Bargad Gali'];
+
+/** Map area drawn for the navigation view (viewBox units). */
+export const WORLD = { x: -140, y: -120, w: 620, h: 640 };
+
+/** Compass bearing (0 = up, clockwise) between two points. */
+export function bearing(a: Pt, b: Pt): number {
+  return (Math.atan2(b[0] - a[0], -(b[1] - a[1])) * 180) / Math.PI;
+}
+
+/** Bearing of the road a little ahead of position t, so corners are taken smoothly. */
+export function bearingAt(l: Line, t: number, ahead = 22): number {
+  const here = pointAt(l, t);
+  const tAhead = Math.min(1, t + ahead / l.total);
+  const there = tAhead - t < 0.002 ? pointAt(l, Math.max(0, t - ahead / l.total)) : pointAt(l, tAhead);
+  return tAhead - t < 0.002 ? bearing(there, here) : bearing(here, there);
+}
+
+export type Turn = 'left' | 'right' | 'slight-left' | 'slight-right' | 'straight' | 'arrive';
+
+export type Instruction = { turn: Turn; text: string; street: string; metres: number };
+
+/** Turn-by-turn instruction for position t along a line. */
+export function instructionAt(l: Line, streets: string[], t: number, totalKm: number, destination: string): Instruction {
+  const here = Math.min(1, Math.max(0, t)) * l.total;
+  let seg = l.lengths.findIndex((v, i) => i > 0 && v >= here) - 1;
+  if (seg < 0) seg = l.pts.length - 2;
+  const street = streets[seg] ?? '';
+  const scale = (totalKm * 1000) / l.total;
+  for (let v = seg + 1; v < l.pts.length - 1; v++) {
+    if (streets[v] !== streets[v - 1]) {
+      const a = bearing(l.pts[v - 1], l.pts[v]);
+      const b = bearing(l.pts[v], l.pts[v + 1]);
+      const d = ((b - a + 540) % 360) - 180;
+      const turn: Turn = Math.abs(d) < 20 ? 'straight' : Math.abs(d) < 45 ? (d > 0 ? 'slight-right' : 'slight-left') : d > 0 ? 'right' : 'left';
+      const verb = turn === 'straight' ? 'Continue onto' : turn.startsWith('slight') ? `Keep ${d > 0 ? 'right' : 'left'} onto` : `Turn ${turn} onto`;
+      return { turn, text: `${verb} ${streets[v]}`, street, metres: (l.lengths[v] - here) * scale };
+    }
+  }
+  return { turn: 'arrive', text: `Arrive at ${destination}`, street, metres: (l.total - here) * scale };
+}
+
+export const fmtDist = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.max(0, Math.round(m / 10) * 10)} m`);

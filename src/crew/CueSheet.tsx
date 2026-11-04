@@ -4,20 +4,20 @@ import { brand } from '../brand';
 import { KIND_LABEL, newId } from '../show/live';
 import { makeCue } from '../show/template';
 import { Cue } from '../show/types';
-import { useShow } from '../sync/ShowContext';
+import { How, useShow } from '../sync/ShowContext';
 import { Button, C, Card, s, Segmented, SectionTitle } from '../ui';
 import { CueEditor } from './CueEditor';
 
 const DELAYS = [0, 5, 10, 30, 60];
 
-const SCREEN_NAME = { dashboard: 'Dashboard', offer: 'Order request', ride: 'Ride map', arrival: 'Arrival' } as const;
+const SCREEN_NAME = { dashboard: 'Dashboard', offer: 'Order request', ride: 'Ride map', arrival: 'Arrival', outcome: 'Result' } as const;
 
 /**
  * The cue sheet, by episode: fire any cue now or after a delay, or fire the next one.
  * `onFired` lets the crew panel close itself so the rider screen is visible.
  */
 export function CueSheet({ onFired }: { onFired?: () => void }) {
-  const { show, updateShow, resetShow, live, schedule, pending, cancelPending, nextUp, riderNote, room } = useShow();
+  const { show, updateShow, resetShow, live, schedule, pending, cancelPending, nextUp, riderNote, room, notifyStatus, mode } = useShow();
   const [delay, setDelay] = useState(0);
   const [editing, setEditing] = useState<{ cue: Cue; isNew: boolean } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -33,8 +33,8 @@ export function CueSheet({ onFired }: { onFired?: () => void }) {
   const currentEp = current?.episode ?? 1;
   const isOpen = (ep: number) => open[ep] ?? ep === currentEp;
 
-  const go = (cue: Cue) => {
-    schedule(cue, delay);
+  const go = (cue: Cue, how: How = 'fire') => {
+    schedule(cue, delay, how);
     onFired?.();
   };
 
@@ -106,12 +106,23 @@ export function CueSheet({ onFired }: { onFired?: () => void }) {
             <Text style={s.label}>Delay</Text>
             <Segmented options={DELAYS.map((n) => ({ value: String(n), label: n ? `${n}s` : 'Now' }))} value={String(delay)} onChange={(v) => setDelay(Number(v))} />
           </View>
-          {nextUp ? (
+          {nextUp && nextUp.kind === 'offer' ? (
+            <View style={{ gap: 8 }}>
+              <Text style={{ color: C.ink, fontWeight: '700' }}>Next: {nextUp.label}</Text>
+              <OfferChoice delay={delay} onTakeover={() => go(nextUp)} onNotify={() => go(nextUp, 'notify')} />
+            </View>
+          ) : nextUp ? (
             <Button label={`${delay ? `In ${delay}s · ` : ''}Fire next: ${nextUp.label}`} onPress={() => go(nextUp)} />
           ) : (
             <Text style={s.p}>That was the last cue.</Text>
           )}
         </Card>
+      )}
+
+      {notifyStatus && Date.now() - notifyStatus.at < 20000 && (
+        <Text accessibilityLiveRegion="polite" style={{ color: notifyStatus.ok ? C.ok : C.danger, fontWeight: '600' }}>
+          {notifyStatus.text}
+        </Text>
       )}
 
       {/* Episodes */}
@@ -169,15 +180,22 @@ export function CueSheet({ onFired }: { onFired?: () => void }) {
                         <Text style={{ color: C.muted, fontWeight: '800' }}>▼</Text>
                       </Pressable>
                     </View>
+                    {c.kind === 'offer' ? (
+                      <View style={{ gap: 6 }}>
+                        <SmallFire label={delay ? `${delay}s` : 'Take over'} a11y={`Take over the screen with ${c.label}`} disabled={!!pending} onPress={() => go(c)} />
+                        <SmallFire label={mode === 'rider' ? 'Notify' : 'Push'} a11y={`Send ${c.label} as a notification`} disabled={!!pending} onPress={() => go(c, 'notify')} light />
+                      </View>
+                    ) : (
                     <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Fire ${c.label}${delay ? ` in ${delay} seconds` : ''}`}
-                      disabled={!!pending}
-                      onPress={() => go(c)}
-                      style={({ pressed }) => ({ minWidth: 64, minHeight: 44, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, opacity: pending ? 0.4 : pressed ? 0.75 : 1 })}
-                    >
-                      <Text style={{ color: C.white, fontWeight: '800' }}>{delay ? `${delay}s` : 'Fire'}</Text>
-                    </Pressable>
+                        accessibilityRole="button"
+                        accessibilityLabel={`Fire ${c.label}${delay ? ` in ${delay} seconds` : ''}`}
+                        disabled={!!pending}
+                        onPress={() => go(c)}
+                        style={({ pressed }) => ({ minWidth: 64, minHeight: 44, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, opacity: pending ? 0.4 : pressed ? 0.75 : 1 })}
+                      >
+                        <Text style={{ color: C.white, fontWeight: '800' }}>{delay ? `${delay}s` : 'Fire'}</Text>
+                      </Pressable>
+                    )}
                   </View>
                 );
               })}
@@ -229,6 +247,34 @@ export function CueSheet({ onFired }: { onFired?: () => void }) {
         onDelete={(id) => updateShow({ ...show, cues: show.cues.filter((x) => x.id !== id) })}
         onClose={() => setEditing(null)}
       />
+    </View>
+  );
+}
+
+function SmallFire({ label, a11y, onPress, disabled, light }: { label: string; a11y: string; onPress: () => void; disabled?: boolean; light?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({ minWidth: 84, minHeight: 40, borderRadius: 12, backgroundColor: light ? '#EAF3FF' : C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, opacity: disabled ? 0.4 : pressed ? 0.75 : 1 })}
+    >
+      <Text style={{ color: light ? C.primary : C.white, fontWeight: '800', fontSize: 13 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** The two ways an order request can reach the rider phone. */
+function OfferChoice({ delay, onTakeover, onNotify }: { delay: number; onTakeover: () => void; onNotify: () => void }) {
+  const pre = delay ? `In ${delay}s · ` : '';
+  return (
+    <View style={{ gap: 8 }}>
+      <Button label={`${pre}Take over the dashboard`} onPress={onTakeover} />
+      <Button label={`${pre}Send as a notification`} kind="secondary" onPress={onNotify} />
+      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 18 }}>
+        Take over: the dashboard turns into the order screen. Notification: a phone notification drops down, and tapping it opens the order screen.
+      </Text>
     </View>
   );
 }

@@ -8,14 +8,19 @@ It's a small, real Android app: React Native + Expo, a Firebase Realtime Databas
 
 ## What's on screen
 
+Bright cards on a dark night map, in two typefaces: **Sora** for numbers and headings, **Manrope** for everything else.
+
 | Screen | What happens |
 |---|---|
 | **Dashboard** | A struggling rider's day: ₹186 earned, overdue cash deposit, falling weekly earnings, penalties. |
-| **Order request** | Full-screen request with a payout that counts up, a pulsing icon, a route preview, an accept countdown and **swipe to accept**. |
-| **Ride** | Night map from the banyan (Purana Bargad) to Shamshaan Ghat, with a moving bike marker, an ETA, minutes and km left, a progress bar, the payout, and an updates feed. |
-| **Reroute** | *GPS signal lost*: the map shakes and flickers red, the ETA goes `--:--`, then *Recalculating…*, then the route redraws back to the banyan with *Cargo returned to pickup* and a **Restart trip** swipe. |
-| **Messages** | Banners that drop in over any screen (blue / amber / red) and stay in the ride's updates, e.g. the −₹5,000 late penalty with the payout struck through. |
-| **Arrival** | *Delivery point reached*: Confirm delivery, or Cancel order → "You will forfeit ₹46,000. Are you sure?" → earnings roll down to **₹0**. |
+| **Order request** | Arrives one of two ways, chosen by the crew: **Take over** (a circle grows out of the dashboard's *Online* pill) or **Notification** (a real phone notification; tapping it opens the request). No map: payout, accept countdown, pickup and drop, customer note, **Accept order** / **Reject**. |
+| **Order accepted** | Accept morphs into a blue *Order accepted* screen, then hands over to the ride view. |
+| **Ride** | A sat-nav view: the map is zoomed in, follows the rider and **turns with the road**, with a turn-by-turn banner (*Turn right onto NH 66 · 450 m*), ETA, minutes and km left, payout, updates, and a **Cancel order** button that is always on screen. |
+| **GPS movement** | The marker moves only while the rider phone is actually moving (it reads GPS; faster riding means a faster marker) and stays still when the rider stops. *Timer* and *Hold* modes are in the crew panel; if GPS drops out, it falls back to the timer. |
+| **Reroute** | *GPS signal lost* (red, map shakes) → *Recalculating route* (amber, map zooms out) → the route redraws from the banyan → zooms back in, with a **Restart trip** swipe. |
+| **Messages** | Banners drop in over any screen (white, amber or a red gradient for penalties) and stay in the ride's updates. |
+| **Arrival** | *You've arrived* with **Confirm delivery** and **Cancel order**. |
+| **Cancelled / delivered** | "You will forfeit ₹46,000. Are you sure?" → *Order cancelled*, with earnings rolling down to **₹0**. This screen syncs to every paired phone. |
 
 The story clock on screen ticks forward in real time from each cue. The map warms slightly at dawn.
 
@@ -41,6 +46,10 @@ The actor's swipes (accept, start trip, restart trip) move on to the next screen
 - Pick **Rider** or **Director** on first launch. You can switch at any time.
 - **Pairing:** tap *Make a new 5-digit code* on one phone and type the same code on the others. Any number of phones can join, e.g. a backup rider phone or two directors. **Unpair** at any time, and a new code is made every time.
 - **Crew panel on the rider phone:** hold the logo on the dashboard, or hold the clock on any full-screen view. It has the same cue sheet with a delay timer: pick 5–60 s, the panel closes, and the cue fires on time with no internet needed.
+
+## Order notifications
+
+*Push* on the director phone sends a real Android notification to the rider phone through Expo's push service (the Firebase FCM V1 key is uploaded to the Expo project for `com.sawaari.rider`). *Notify* in the crew panel schedules the same notification on the rider phone itself, so it works offline and with the app in the background. Tapping it opens the order request.
 
 ## Backend: Firebase Realtime Database
 
@@ -71,8 +80,10 @@ The app's identity lives in [`brand.config.json`](brand.config.json): app name, 
 App.tsx                 mode picker, providers
 src/show/               data model, script template, cue logic (applyCue), story clock
 src/sync/ShowContext    Firebase rooms: pairing, syncing, presence, delayed fire
-src/stage/              full-screen rider views: OfferScreen, RideScreen, ArrivalScreen,
-                        NightMap (SVG), AlertBanner, swipe slider, countdown ring
+src/sync/push.ts        order notifications (push and local)
+src/stage/              rider views: OfferScreen, RideScreen, ArrivalScreen, CancelFlow,
+                        NavMap (rotating sat-nav map), MapArt (SVG), NavBanner, AlertBanner
+src/motion/             GPS: moving or still, speed
 src/crew/               cue sheet, cue editor, trip editor, pairing, crew panel
 src/Director.tsx        director phone
 src/RiderHome.tsx       rider phone

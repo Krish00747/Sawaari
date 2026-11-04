@@ -21,6 +21,8 @@ export const INITIAL_LIVE: LiveState = {
   clock: '',
   clockAt: 0,
   screen: 'dashboard',
+  entry: 'takeover',
+  outcome: '',
   cue: null,
   lastCueId: '',
   alerts: [],
@@ -60,9 +62,9 @@ export function storyClock(live: LiveState, now: number): string | null {
 // ---------- Firing ----------
 
 /** The next state after a cue fires. */
-export function applyCue(prev: LiveState, cue: Cue, order: Order): LiveState {
+export function applyCue(prev: LiveState, cue: Cue, order: Order, entry: LiveState['entry'] = 'takeover'): LiveState {
   const now = Date.now();
-  const base = { ...prev, seq: newId(), at: now, clock: cue.clock, clockAt: now, newAlertId: '', lastCueId: cue.id };
+  const base = { ...prev, seq: newId(), at: now, clock: cue.clock, clockAt: now, newAlertId: '', lastCueId: cue.id, outcome: '' as const };
   const withPayout = (s: LiveState): LiveState =>
     cue.payout > 0 && cue.payout !== s.payout ? { ...s, prevPayout: s.payout, payout: cue.payout } : { ...s, prevPayout: s.payout };
 
@@ -70,8 +72,10 @@ export function applyCue(prev: LiveState, cue: Cue, order: Order): LiveState {
     case 'dashboard':
       return { ...base, screen: 'dashboard', cue, alerts: [], payout: order.payout, prevPayout: order.payout };
     case 'offer':
-      return { ...base, screen: 'offer', cue, alerts: [], payout: order.payout, prevPayout: order.payout };
+      return { ...base, screen: 'offer', entry, cue, alerts: [], payout: order.payout, prevPayout: order.payout };
     case 'alert': {
+      // An alert never clears a cancelled/delivered screen.
+      if (prev.screen === 'outcome') return { ...prev, seq: newId(), lastCueId: cue.id };
       const item: AlertItem = { id: newId(), title: cue.title, body: cue.body, tone: cue.tone, clock: cue.clock };
       // An alert keeps the current screen (and its map movement) and moves the clock on.
       return withPayout({ ...base, at: prev.at, alerts: [item, ...prev.alerts].slice(0, 6), newAlertId: item.id });
@@ -161,13 +165,15 @@ export function cleanShow(s: Partial<Show> | null | undefined): Show {
 
 export function cleanLive(l: Partial<LiveState> | null | undefined): LiveState {
   if (!l || typeof l !== 'object') return INITIAL_LIVE;
-  const screens = ['dashboard', 'offer', 'ride', 'arrival'];
+  const screens = ['dashboard', 'offer', 'ride', 'arrival', 'outcome'];
   return {
     seq: str(l.seq, 'initial'),
     at: num(l.at, 0),
     clock: str(l.clock, ''),
     clockAt: num(l.clockAt, 0),
     screen: screens.includes(l.screen as string) ? (l.screen as LiveState['screen']) : 'dashboard',
+    entry: l.entry === 'notification' ? 'notification' : 'takeover',
+    outcome: l.outcome === 'cancelled' || l.outcome === 'delivered' ? l.outcome : '',
     cue: l.cue ? cleanCue(l.cue) : null,
     lastCueId: str(l.lastCueId, ''),
     alerts: arr<LiveState['alerts'][number]>(l.alerts),
@@ -179,3 +185,8 @@ export function cleanLive(l: Partial<LiveState> | null | undefined): LiveState {
 
 /** Firebase rejects `undefined`; JSON round-trip drops it. */
 export const forFirebase = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+
+/** The rider cancelled or delivered: everyone sees the result screen. */
+export function withOutcome(prev: LiveState, outcome: 'cancelled' | 'delivered'): LiveState {
+  return { ...prev, seq: newId(), screen: 'outcome', outcome, at: Date.now(), newAlertId: '' };
+}

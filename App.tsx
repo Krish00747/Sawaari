@@ -1,4 +1,7 @@
+import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
+import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold } from '@expo-google-fonts/sora';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Image, Text, View } from 'react-native';
@@ -7,6 +10,7 @@ import { brand } from './src/brand';
 import { Director } from './src/Director';
 import { ErrorBoundary } from './src/ErrorBoundary';
 import { RiderHome } from './src/RiderHome';
+import { MotionProvider } from './src/motion/MotionContext';
 import { Mode, ShowProvider, useShow } from './src/sync/ShowContext';
 import { Button, C, s } from './src/ui';
 
@@ -14,6 +18,17 @@ const MODE_KEY = 'sawaari.mode';
 
 export default function App() {
   const [mode, setMode] = useState<Mode | null | undefined>(undefined);
+  const [fontsLoaded, fontError] = useFonts({
+    Sora_600SemiBold,
+    Sora_700Bold,
+    Sora_800ExtraBold,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+  });
+  const fontsReady = fontsLoaded || !!fontError;
 
   useEffect(() => {
     AsyncStorage.getItem(MODE_KEY)
@@ -29,16 +44,18 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        {mode === undefined ? (
+        {mode === undefined || !fontsReady ? (
           <View style={{ flex: 1, backgroundColor: C.primary }} />
         ) : mode === null ? (
           <ModePicker onPick={choose} />
         ) : (
           <ShowProvider mode={mode}>
-            <Ready>
-              {mode === 'rider' ? <RiderHome onSwitchMode={() => choose('director')} /> : <Director onSwitchMode={() => choose('rider')} />}
-              {mode === 'director' && <StatusBar style="light" />}
-            </Ready>
+            <MotionProvider enabled={mode === 'rider'}>
+              <Ready>
+                {mode === 'rider' ? <RiderHome onSwitchMode={() => choose('director')} /> : <Director onSwitchMode={() => choose('rider')} />}
+                {mode === 'director' && <StatusBar style="light" />}
+              </Ready>
+            </MotionProvider>
           </ShowProvider>
         )}
       </ErrorBoundary>

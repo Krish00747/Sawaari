@@ -1,11 +1,12 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, PanResponder, Pressable, StyleProp, Text, TextStyle, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, PanResponder, Pressable, StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { rupee } from '../show/live';
-import { N, TAB } from './theme';
+import { F, GRAD, L, t, TAB } from './theme';
 
 /** The Sawaari rider glyph (same drawing as the app icon). */
-export function BikeGlyph({ size = 40, color = '#FFFFFF', cut = N.brand }: { size?: number; color?: string; cut?: string }) {
+export function BikeGlyph({ size = 40, color = '#FFFFFF', cut = L.brand }: { size?: number; color?: string; cut?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <Rect x={14} y={37} width={21} height={17} rx={3} fill={color} />
@@ -20,19 +21,7 @@ export function BikeGlyph({ size = 40, color = '#FFFFFF', cut = N.brand }: { siz
 }
 
 /** A number that rolls from one value to another. */
-export function RollingRupee({
-  from,
-  to,
-  duration = 1200,
-  delay = 0,
-  style,
-}: {
-  from: number;
-  to: number;
-  duration?: number;
-  delay?: number;
-  style?: StyleProp<TextStyle>;
-}) {
+export function RollingRupee({ from, to, duration = 1200, delay = 0, style }: { from: number; to: number; duration?: number; delay?: number; style?: StyleProp<TextStyle> }) {
   const [shown, setShown] = useState(from);
   useEffect(() => {
     const v = new Animated.Value(from);
@@ -48,20 +37,20 @@ export function RollingRupee({
 }
 
 /** Countdown ring with seconds in the middle. */
-export function CountdownRing({ seconds, size = 58 }: { seconds: number; size?: number }) {
+export function CountdownRing({ seconds, size = 64, track = L.sky, color = L.brand2 }: { seconds: number; size?: number; track?: string; color?: string }) {
   const v = useRef(new Animated.Value(1)).current;
   const [left, setLeft] = useState(seconds);
-  const r = size / 2 - 4;
+  const r = size / 2 - 5;
   const c = 2 * Math.PI * r;
   useEffect(() => {
     v.setValue(1);
     const a = Animated.timing(v, { toValue: 0, duration: seconds * 1000, easing: Easing.linear, useNativeDriver: false });
     a.start();
     const started = Date.now();
-    const t = setInterval(() => setLeft(Math.max(0, Math.ceil(seconds - (Date.now() - started) / 1000))), 200);
+    const id = setInterval(() => setLeft(Math.max(0, Math.ceil(seconds - (Date.now() - started) / 1000))), 200);
     return () => {
       a.stop();
-      clearInterval(t);
+      clearInterval(id);
     };
   }, [seconds, v]);
   const offset = v.interpolate({ inputRange: [0, 1], outputRange: [c, 0] });
@@ -69,34 +58,29 @@ export function CountdownRing({ seconds, size = 58 }: { seconds: number; size?: 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`${left} seconds to accept`}>
       <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(191,221,255,0.15)" strokeWidth={5} fill="none" />
-        <AnimatedRing cx={size / 2} cy={size / 2} r={r} stroke={urgent ? N.red : N.light} strokeWidth={5} fill="none" strokeLinecap="round" strokeDasharray={`${c} ${c}`} strokeDashoffset={offset} />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={6} fill="none" />
+        <AnimatedRing cx={size / 2} cy={size / 2} r={r} stroke={urgent ? L.red : color} strokeWidth={6} fill="none" strokeLinecap="round" strokeDasharray={`${c} ${c}`} strokeDashoffset={offset} />
       </Svg>
-      <Text style={[TAB, { color: urgent ? N.red : N.text, fontSize: size * 0.32, fontWeight: '800' }]}>{left}</Text>
+      <Text style={[TAB, t(F.d8, size * 0.32, urgent ? L.red : L.ink)]}>{left}</Text>
     </View>
   );
 }
 const AnimatedRing = Animated.createAnimatedComponent(Circle);
 
-/** Swipe-to-confirm slider, the way rider apps do it. */
-export function SwipeButton({
-  label,
-  onComplete,
-  tone = 'light',
-}: {
-  label: string;
-  onComplete: () => void;
-  tone?: 'light' | 'green';
-}) {
-  const THUMB = 58;
+type SwipeTone = 'brand' | 'green' | 'amber';
+
+/** Swipe-to-confirm slider with a gradient track. */
+export function SwipeButton({ label, onComplete, tone = 'brand' }: { label: string; onComplete: () => void; tone?: SwipeTone }) {
+  const THUMB = 56;
+  const H = THUMB + 8;
   const x = useRef(new Animated.Value(0)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
   const [width, setWidth] = useState(0);
-  const [done, setDone] = useState(false);
   const max = Math.max(1, width - THUMB - 8);
   const maxRef = useRef(max);
   maxRef.current = max;
   const doneRef = useRef(false);
+  const [done, setDone] = useState(false);
 
   const finish = () => {
     if (doneRef.current) return;
@@ -122,17 +106,17 @@ export function SwipeButton({
       onMoveShouldSetPanResponder: (_, g) => !doneRef.current && Math.abs(g.dx) > 4,
       onPanResponderMove: (_, g) => x.setValue(Math.min(maxRef.current, Math.max(0, g.dx))),
       onPanResponderRelease: (_, g) => {
-        if (g.dx > maxRef.current * 0.78) finish();
+        if (g.dx > maxRef.current * 0.75) finish();
         else Animated.spring(x, { toValue: 0, useNativeDriver: false, bounciness: 6 }).start();
       },
       onPanResponderTerminate: () => Animated.spring(x, { toValue: 0, useNativeDriver: false }).start(),
     }),
   ).current;
 
-  const accent = tone === 'green' ? N.green : N.light;
-  const fill = x.interpolate({ inputRange: [0, max], outputRange: [THUMB + 8, width || THUMB + 8], extrapolate: 'clamp' });
+  const colors = tone === 'green' ? GRAD.green : tone === 'amber' ? GRAD.amber : GRAD.brand;
+  const thumbIcon = tone === 'amber' ? L.ink : colors[1];
   const labelO = x.interpolate({ inputRange: [0, max * 0.6], outputRange: [1, 0], extrapolate: 'clamp' });
-  const shimmerO = shimmer.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.35, 1, 0.35] });
+  const shimmerO = shimmer.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.4, 1, 0.4] });
 
   return (
     <View
@@ -143,19 +127,19 @@ export function SwipeButton({
       accessibilityActions={[{ name: 'activate' }]}
       onAccessibilityAction={finish}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={{ height: THUMB + 8, borderRadius: (THUMB + 8) / 2, backgroundColor: 'rgba(191,221,255,0.1)', borderWidth: 1, borderColor: 'rgba(191,221,255,0.18)', justifyContent: 'center', overflow: 'hidden' }}
+      style={{ height: H, borderRadius: H / 2, overflow: 'hidden', justifyContent: 'center' }}
     >
-      <Animated.View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: fill, backgroundColor: accent, opacity: 0.22, borderRadius: (THUMB + 8) / 2 }} />
-      <Animated.View style={{ position: 'absolute', left: THUMB + 16, right: 20, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, opacity: labelO }}>
-        <Text style={{ color: N.text, fontSize: 17, fontWeight: '800', letterSpacing: 0.3 }}>{done ? 'Done' : label}</Text>
-        <Animated.Text style={{ color: accent, fontSize: 18, fontWeight: '900', opacity: shimmerO }}>›››</Animated.Text>
+      <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      <Animated.View style={{ position: 'absolute', left: THUMB + 18, right: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, opacity: labelO }}>
+        <Text style={t(F.d7, 17, tone === 'amber' ? L.ink : '#FFFFFF')}>{done ? 'Done' : label}</Text>
+        <Animated.Text style={[t(F.d8, 17, tone === 'amber' ? L.ink : '#FFFFFF'), { opacity: shimmerO }]}>›››</Animated.Text>
       </Animated.View>
       <Animated.View
         {...pan.panHandlers}
-        style={{ position: 'absolute', left: 4, width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: accent, alignItems: 'center', justifyContent: 'center', transform: [{ translateX: x }] }}
+        style={{ position: 'absolute', left: 4, width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', transform: [{ translateX: x }] }}
       >
         <Svg width={26} height={26} viewBox="0 0 24 24">
-          <Path d="M5 12h13M13 6l6 6-6 6" stroke={N.bg} strokeWidth={2.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M5 12h13M13 6l6 6-6 6" stroke={thumbIcon} strokeWidth={2.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </Animated.View>
     </View>
@@ -188,21 +172,34 @@ export function LiveDot({ color, size = 8 }: { color: string; size?: number }) {
   );
 }
 
-export function Pill({ children, color, bg }: { children: ReactNode; color: string; bg: string }) {
+/** The story clock. Long-press opens the crew panel (hidden from the actor). */
+export function StoryClock({ text, onLongPress, dark }: { text: string; onLongPress: () => void; dark?: boolean }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingLeft: 6, paddingRight: 12, borderRadius: 999, backgroundColor: bg, alignSelf: 'flex-start' }}>
-      {typeof children === 'string' ? <Text style={{ color, fontWeight: '800', fontSize: 13 }}>{children}</Text> : children}
-    </View>
+    <Pressable onLongPress={onLongPress} delayLongPress={900} hitSlop={14} accessibilityLabel={`Time ${text}`}>
+      <View style={{ paddingVertical: 6, paddingHorizontal: 11, borderRadius: 999, backgroundColor: dark ? 'rgba(255,255,255,0.16)' : '#FFFFFF', borderWidth: dark ? 0 : 1, borderColor: L.line }}>
+        <Text style={[TAB, t(F.d7, 13, dark ? '#FFFFFF' : L.ink)]}>{text}</Text>
+      </View>
+    </Pressable>
   );
 }
 
-/** The story clock in the top corner. Long-press opens the crew panel (hidden from the actor). */
-export function StoryClock({ text, onLongPress }: { text: string; onLongPress: () => void }) {
+/** Small icon button used in the action bar. */
+export function IconAction({ label, icon, onPress, style }: { label: string; icon: 'phone' | 'help'; onPress: () => void; style?: StyleProp<ViewStyle> }) {
   return (
-    <Pressable onLongPress={onLongPress} delayLongPress={900} hitSlop={14} accessibilityLabel={`Time ${text}`}>
-      <View style={{ paddingVertical: 7, paddingHorizontal: 12, borderRadius: 999, backgroundColor: 'rgba(8,18,38,0.72)', borderWidth: 1, borderColor: N.line }}>
-        <Text style={[TAB, { color: N.text, fontWeight: '800', fontSize: 14 }]}>{text}</Text>
-      </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [{ height: 52, minWidth: 52, borderRadius: 16, backgroundColor: L.sky, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, paddingHorizontal: 16, opacity: pressed ? 0.7 : 1 }, style]}
+    >
+      <Svg width={20} height={20} viewBox="0 0 24 24">
+        {icon === 'phone' ? (
+          <Path d="M6.6 10.8a15.2 15.2 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1z" fill={L.brand} />
+        ) : (
+          <Path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 15.5a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5zm1.3-5.1v.6h-2.5v-1c0-1.2.8-1.8 1.6-2.3.6-.4 1-.7 1-1.3 0-.7-.6-1.2-1.4-1.2-.9 0-1.5.5-1.6 1.4L7.9 8.3C8.2 6.4 9.8 5.3 12 5.3c2.3 0 3.9 1.3 3.9 3.2 0 1.6-1.1 2.3-2 2.9-.4.3-.6.5-.6 1z" fill={L.brand} />
+        )}
+      </Svg>
+      <Text style={t(F.b7, 15, L.brand)}>{label}</Text>
     </Pressable>
   );
 }
