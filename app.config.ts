@@ -18,7 +18,7 @@ const config: ExpoConfig = {
       monochromeImage: './assets/android-icon-monochrome.png',
       backgroundColor: brand.primaryColor,
     },
-    permissions: ['POST_NOTIFICATIONS'],
+    permissions: ['VIBRATE'],
   },
   plugins: [
     [
@@ -28,14 +28,6 @@ const config: ExpoConfig = {
         imageWidth: 200,
         resizeMode: 'contain',
         backgroundColor: brand.primaryColor,
-      },
-    ],
-    [
-      'expo-notifications',
-      {
-        icon: './assets/notification-icon.png',
-        color: brand.notificationColor,
-        defaultChannel: 'orders',
       },
     ],
   ],

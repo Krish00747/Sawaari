@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native';
-import { Dashboard, Order, rupee } from './defaults';
+import { rupee } from './show/live';
+import { Dashboard, DashOrder as Order } from './show/types';
 import { C, Card, s } from './ui';
 
 const AMBER_BG = '#FFF4E5';

@@ -1,45 +1,101 @@
-import * as Clipboard from 'expo-clipboard';
+import { StatusBar } from 'expo-status-bar';
+import { useKeepAwake } from 'expo-keep-awake';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brand } from './brand';
-import { newId, SavedCue } from './defaults';
-import { CueEditor } from './editors/CueEditor';
-import { CueList } from './editors/CueList';
-import { DashboardEditor } from './editors/DashboardEditor';
-import { DelayPicker } from './editors/DelayPicker';
-import { cancelAllLocal, getRiderCode, onDashboardSync, scheduleLocal } from './notify';
-import { PermissionWarning } from './PermissionWarning';
+import { CrewPanel } from './crew/CrewPanel';
 import { RiderDashboard } from './RiderDashboard';
-import { useCues, useDashboard } from './useStored';
-import { Button, C, Card, s, SectionTitle, Sheet, StatusLine } from './ui';
+import { AlertBanner } from './stage/AlertBanner';
+import { ArrivalScreen } from './stage/ArrivalScreen';
+import { OfferScreen } from './stage/OfferScreen';
+import { RideScreen } from './stage/RideScreen';
+import { dawnAmount, useStoryClock } from './stage/useClock';
+import { useShow } from './sync/ShowContext';
+import { C } from './ui';
 
-/** What the actor sees on camera. Long-press the logo to open the crew panel. */
-export function RiderHome({
-  onSwitchMode,
-  permissionDenied,
-}: {
-  onSwitchMode: () => void;
-  permissionDenied: boolean;
-}) {
-  const insets = useSafeAreaInsets();
-  const [online, setOnline] = useState(true);
+/** The rider phone. Shows the dashboard or a full-screen ride moment; the crew panel is hidden behind long-presses. */
+export function RiderHome({ onSwitchMode }: { onSwitchMode: () => void }) {
+  useKeepAwake();
+  const { live, show, advance, fire, noteFromRider } = useShow();
   const [crewOpen, setCrewOpen] = useState(false);
-  const dash = useDashboard();
+  const clock = useStoryClock(live);
+  const dawn = dawnAmount(clock.minutes);
+  const openCrew = () => setCrewOpen(true);
 
-  // Dashboard edits sent from the director phone land here instantly.
-  useEffect(() => onDashboardSync(dash.setLocalOnly), [dash.setLocalOnly]);
+  // Full-screen look for closeups: no Android navigation bar.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    NavigationBar.setVisibilityAsync('hidden').catch(() => undefined);
+    return () => {
+      NavigationBar.setVisibilityAsync('visible').catch(() => undefined);
+    };
+  }, []);
 
+  const home = () => {
+    const dash = show.cues.find((c) => c.kind === 'dashboard');
+    if (dash) fire(dash);
+  };
+
+  let screen: React.ReactNode;
+  if (live.screen === 'offer') {
+    screen = (
+      <OfferScreen
+        key={live.at}
+        order={show.order}
+        clock={clock.text}
+        onCrew={openCrew}
+        onAccept={() => {
+          noteFromRider('Rider accepted the order');
+          advance();
+        }}
+        onReject={() => {
+          noteFromRider('Rider rejected the order');
+          home();
+        }}
+      />
+    );
+  } else if (live.screen === 'ride' && live.cue) {
+    screen = (
+      <RideScreen
+        live={live}
+        order={show.order}
+        clock={clock.text}
+        clockMinutes={clock.minutes}
+        dawn={dawn}
+        onCrew={openCrew}
+        onAction={() => {
+          noteFromRider(`Rider swiped "${live.cue?.action}"`);
+          advance();
+        }}
+      />
+    );
+  } else if (live.screen === 'arrival' && live.cue) {
+    screen = <ArrivalScreen live={live} order={show.order} clock={clock.text} dawn={dawn} onCrew={openCrew} onNote={noteFromRider} />;
+  } else {
+    screen = <Dashboard onCrew={openCrew} />;
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <StatusBar hidden={live.screen !== 'dashboard'} style="light" />
+      {screen}
+      <AlertBanner live={live} vibrate={show.order.vibrate} />
+      <CrewPanel visible={crewOpen} onClose={() => setCrewOpen(false)} onSwitchMode={onSwitchMode} />
+    </View>
+  );
+}
+
+function Dashboard({ onCrew }: { onCrew: () => void }) {
+  const insets = useSafeAreaInsets();
+  const { show } = useShow();
+  const [online, setOnline] = useState(true);
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <View style={{ backgroundColor: C.primary, paddingTop: insets.top + 14, paddingBottom: 26, paddingHorizontal: 20, gap: 18 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <Pressable
-            onLongPress={() => setCrewOpen(true)}
-            delayLongPress={600}
-            hitSlop={12}
-            accessibilityLabel={`${brand.companyName} logo`}
-          >
+          <Pressable onLongPress={onCrew} delayLongPress={600} hitSlop={12} accessibilityLabel={`${brand.companyName} logo`}>
             <Image source={require('../assets/icon.png')} style={{ width: 40, height: 40, borderRadius: 10 }} />
           </Pressable>
           <View style={{ flex: 1 }}>
@@ -47,7 +103,7 @@ export function RiderHome({
             <Text style={{ color: C.light, fontSize: 13 }}>{brand.tagline}</Text>
           </View>
         </View>
-        <Text style={{ color: C.white, fontSize: 24, fontWeight: '700' }}>Namaste, {dash.dashboard.riderName}</Text>
+        <Text style={{ color: C.white, fontSize: 24, fontWeight: '700' }}>Namaste, {show.dashboard.riderName}</Text>
         <Pressable
           accessibilityRole="switch"
           accessibilityState={{ checked: online }}
@@ -64,182 +120,12 @@ export function RiderHome({
           }}
         >
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: online ? C.ok : '#9AA3AF' }} />
-          <Text style={{ fontWeight: '700', color: online ? C.primary : C.white }}>
-            {online ? 'Online · Ready for orders' : 'Offline'}
-          </Text>
+          <Text style={{ fontWeight: '700', color: online ? C.primary : C.white }}>{online ? 'Online · Ready for orders' : 'Offline'}</Text>
         </Pressable>
       </View>
-
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
-        <RiderDashboard online={online} data={dash.dashboard} />
+      <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 24 }}>
+        <RiderDashboard online={online} data={show.dashboard} />
       </ScrollView>
-
-      <CrewPanel
-        visible={crewOpen}
-        onClose={() => setCrewOpen(false)}
-        onSwitchMode={onSwitchMode}
-        permissionDenied={permissionDenied}
-        dash={dash}
-      />
     </View>
-  );
-}
-
-function CrewPanel({
-  visible,
-  onClose,
-  onSwitchMode,
-  permissionDenied,
-  dash,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSwitchMode: () => void;
-  permissionDenied: boolean;
-  dash: ReturnType<typeof useDashboard>;
-}) {
-  const [code, setCode] = useState<string | null>(null);
-  const [codeError, setCodeError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const [timerMsg, setTimerMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const [delay, setDelay] = useState(10);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ cue: SavedCue; isNew: boolean } | null>(null);
-  const [dashOpen, setDashOpen] = useState(false);
-  const { cues, upsert, remove, resetToTemplate } = useCues();
-
-  const selected = cues.find((c) => c.id === selectedId) ?? null;
-
-  useEffect(() => {
-    if (visible) setTimerMsg(null);
-  }, [visible]);
-
-  useEffect(() => {
-    if (!visible || code) return;
-    setCodeError(null);
-    getRiderCode()
-      .then(setCode)
-      .catch((e: Error) => setCodeError(e.message));
-  }, [visible, code, attempt]);
-
-  const fire = async () => {
-    if (!selected) return;
-    try {
-      await scheduleLocal(selected, delay);
-      setTimerMsg({ text: `Timer set ✓ "${selected.label}" in ${Math.max(1, delay)}s. Closing…`, ok: true });
-      setTimeout(onClose, 1200);
-    } catch (e) {
-      setTimerMsg({ text: `Couldn't set timer — ${(e as Error).message}`, ok: false });
-    }
-  };
-
-  return (
-    <Sheet visible={visible} title="Crew panel" onClose={onClose}>
-      {permissionDenied && <PermissionWarning />}
-
-      <Card>
-        <SectionTitle>Pair with the director phone</SectionTitle>
-        <Text style={s.p}>Send this rider code to the director phone and paste it there once.</Text>
-        <Text selectable style={{ fontFamily: 'monospace', fontSize: 13, color: C.ink }}>
-          {code ?? (codeError ? `Couldn't get code — ${codeError}` : 'Getting code…')}
-        </Text>
-        {codeError && <Button label="Try again" kind="secondary" onPress={() => setAttempt((n) => n + 1)} />}
-        {code && (
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button label="Share" onPress={() => Share.share({ message: code })} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                label={copied ? 'Copied ✓' : 'Copy'}
-                kind="secondary"
-                onPress={async () => {
-                  await Clipboard.setStringAsync(code);
-                  setCopied(true);
-                }}
-              />
-            </View>
-          </View>
-        )}
-      </Card>
-
-      <Card>
-        <SectionTitle>Offline timer (no internet needed)</SectionTitle>
-        <Text style={s.p}>Pick a message and a delay, close this panel, lock the phone, roll.</Text>
-        <CueList
-          cues={cues}
-          selectedId={selectedId}
-          onSelect={(c) => setSelectedId(c.id)}
-          onEdit={(c) => setEditing({ cue: c, isNew: false })}
-        />
-        <Button
-          label="+ New message"
-          kind="ghost"
-          onPress={() =>
-            setEditing({ isNew: true, cue: { id: newId(), label: '', title: '', body: '', color: brand.notificationColor } })
-          }
-        />
-        <DelayPicker value={delay} onChange={setDelay} minimum={1} />
-        <Button
-          label={selected ? `Fire in ${Math.max(1, delay)}s` : 'Pick a message first'}
-          disabled={!selected}
-          onPress={fire}
-        />
-        <StatusLine status={timerMsg} />
-        <Button
-          label="Cancel pending timers"
-          kind="ghost"
-          onPress={async () => {
-            await cancelAllLocal().catch(() => undefined);
-            setTimerMsg({ text: 'All pending timers cancelled.', ok: true });
-          }}
-        />
-      </Card>
-
-      <Card>
-        <SectionTitle>Dashboard</SectionTitle>
-        <Text style={s.p}>Change the numbers, orders and warnings on the rider screen.</Text>
-        <Button label="Edit dashboard" kind="secondary" onPress={() => setDashOpen(true)} />
-      </Card>
-
-      <Button
-        label="Reset messages to the template"
-        kind="ghost"
-        onPress={() => {
-          resetToTemplate();
-          setSelectedId(null);
-        }}
-      />
-      <Button
-        label="Switch to director mode"
-        kind="ghost"
-        onPress={() => {
-          onClose();
-          onSwitchMode();
-        }}
-      />
-
-      <CueEditor
-        cue={editing?.cue ?? null}
-        isNew={!!editing?.isNew}
-        onSave={upsert}
-        onDelete={(id) => {
-          remove(id);
-          if (selectedId === id) setSelectedId(null);
-        }}
-        onClose={() => setEditing(null)}
-      />
-
-      <Sheet
-        visible={dashOpen}
-        title="Edit dashboard"
-        onClose={() => setDashOpen(false)}
-        footer={<Button label="Reset dashboard to the template" kind="ghost" onPress={dash.resetToTemplate} />}
-      >
-        <Text style={s.p}>Changes save as you type and show on the rider screen right away.</Text>
-        <DashboardEditor value={dash.dashboard} onChange={dash.setDashboard} />
-      </Sheet>
-    </Sheet>
   );
 }

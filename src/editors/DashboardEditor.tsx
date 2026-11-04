@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
-import { Banner, Dashboard, MAX_ORDERS, newId, Order, OrderStatus, rupee } from '../defaults';
+import { newId, rupee } from '../show/live';
+import { Banner, Dashboard, DashOrder as Order, OrderStatus } from '../show/types';
+
+const MAX_ORDERS = 10;
 import { Button, C, Card, Field, NumField, Segmented, SectionTitle, Sheet, ToggleRow } from '../ui';
 
 /** Edits every number and line of text on the rider's dashboard. */
