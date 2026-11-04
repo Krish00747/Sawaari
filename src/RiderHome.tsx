@@ -78,6 +78,9 @@ export function RiderHome({ onSwitchMode }: { onSwitchMode: () => void }) {
   };
   const call = () => noteFromRider('Rider tapped Call');
   const fresh = Date.now() - live.at < 6000;
+  // The trip that was running before the current cue (shown while gliding to a reroute spot).
+  const cueIdx = show.cues.findIndex((c) => c.id === live.cue?.id);
+  const prevTrip = cueIdx > 0 ? ([...show.cues.slice(0, cueIdx)].reverse().find((c) => c.kind === 'trip') ?? null) : null;
 
   let screen: React.ReactNode = null;
   if (live.screen === 'offer') {
@@ -102,6 +105,7 @@ export function RiderHome({ onSwitchMode }: { onSwitchMode: () => void }) {
       <RideScreen
         live={live}
         order={show.order}
+        prevTrip={prevTrip}
         clock={clock.text}
         clockMinutes={clock.minutes}
         dawn={dawn}

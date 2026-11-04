@@ -5,7 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMotion } from '../motion/MotionContext';
 import { parseClock, rupee } from '../show/live';
-import { AlertItem, LiveState, Order } from '../show/types';
+import { AlertItem, Cue, LiveState, Order } from '../show/types';
 import { IconAction, RollingRupee, SwipeButton } from './bits';
 import { CancelButton, CancelSheet } from './CancelFlow';
 import { APPROACH_LINE, APPROACH_STREETS, fmtDist, instructionAt, ROUTE_LINE, ROUTE_STREETS } from './geo';
@@ -13,7 +13,10 @@ import { BannerKind, NavBanner } from './NavBanner';
 import { Camera, NavMap } from './NavMap';
 import { F, GRAD, L, t, TAB, TONE } from './theme';
 
-type Phase = 'move' | 'glitch' | 'recalc' | 'settled';
+type Phase = 'move' | 'arrive' | 'glitch' | 'recalc' | 'settled';
+
+/** How long the rider is shown at the scripted spot before the reroute plays. */
+const HOLD_SECONDS = 5;
 
 const fmtMins = (m: number) => {
   const v = Math.max(0, Math.round(m));
@@ -24,6 +27,7 @@ const fmtMins = (m: number) => {
 export function RideScreen({
   live,
   order,
+  prevTrip,
   clock,
   clockMinutes,
   dawn,
@@ -34,6 +38,8 @@ export function RideScreen({
 }: {
   live: LiveState;
   order: Order;
+  /** The trip cue before this one, for the ETA shown while moving to a reroute spot. */
+  prevTrip: Cue | null;
   clock: string;
   clockMinutes: number | null;
   dawn: number;
@@ -64,6 +70,7 @@ export function RideScreen({
   const [cancelOpen, setCancelOpen] = useState(false);
 
   const pRef = useRef(cue.from / 100);
+  const onMainRef = useRef(cue.kind !== 'pickup');
   const target = useRef({ to: cue.to / 100, rate: 0, active: false });
 
   useEffect(() => {
@@ -93,6 +100,7 @@ export function RideScreen({
     if (cue.kind === 'reroute') {
       const settle = (animate: boolean) => {
         setPhase('settled');
+        onMainRef.current = true;
         setP(0);
         routeO.setValue(1);
         markerO.setValue(1);
@@ -107,42 +115,67 @@ export function RideScreen({
         run(Animated.timing(rv, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }), () => rv.removeListener(id));
         timers.push(setTimeout(() => setCamera('nav'), 2600));
       };
-      if (elapsed > 4.5) settle(false);
-      else {
-        setPhase('glitch');
-        setCamera('nav');
-        run(Animated.sequence(Array.from({ length: 16 }, (_, i) => Animated.timing(shake, { toValue: i === 15 ? 0 : (Math.random() - 0.5) * 16, duration: 45, useNativeDriver: true }))));
-        run(Animated.sequence([0.4, 0.06, 0.32, 0.03, 0.26, 0.08, 0.22, 0.12].map((v) => Animated.timing(red, { toValue: v, duration: 110, useNativeDriver: true }))));
-        run(Animated.timing(routeO, { toValue: 0.2, duration: 500, useNativeDriver: true }));
-        run(
-          Animated.loop(
-            Animated.sequence([
-              Animated.timing(markerO, { toValue: 0.1, duration: 90, useNativeDriver: true }),
-              Animated.timing(markerO, { toValue: 1, duration: 120, useNativeDriver: true }),
-            ]),
-            { iterations: 7 },
-          ),
-        );
-        bars.forEach((b, i) =>
-          run(
-            Animated.loop(
-              Animated.sequence([
-                Animated.timing(b, { toValue: Math.random(), duration: 70 + i * 30, useNativeDriver: true }),
-                Animated.timing(b, { toValue: Math.random(), duration: 60 + i * 20, useNativeDriver: true }),
-              ]),
-              { iterations: 6 },
-            ),
-          ),
-        );
+      // Sync the rider to where Betaal vanishes in the script (cue.from), like the clock.
+      const spot = cue.from / 100;
+      const needMove = !onMainRef.current || Math.abs(pRef.current - spot) > 0.03;
+      const hold = needMove ? HOLD_SECONDS : 0;
+      const startGlitch = (after: number) => {
         timers.push(
           setTimeout(() => {
-            setPhase('recalc');
-            setCamera('overview');
-            run(Animated.timing(markerO, { toValue: 0, duration: 250, useNativeDriver: true }));
-            run(Animated.timing(red, { toValue: 0, duration: 400, useNativeDriver: true }));
-          }, 1700),
+            setPhase('glitch');
+            setCamera('nav');
+            run(Animated.sequence(Array.from({ length: 16 }, (_, i) => Animated.timing(shake, { toValue: i === 15 ? 0 : (Math.random() - 0.5) * 16, duration: 45, useNativeDriver: true }))));
+            run(Animated.sequence([0.4, 0.06, 0.32, 0.03, 0.26, 0.08, 0.22, 0.12].map((v) => Animated.timing(red, { toValue: v, duration: 110, useNativeDriver: true }))));
+            run(Animated.timing(routeO, { toValue: 0.2, duration: 500, useNativeDriver: true }));
+            run(
+              Animated.loop(
+                Animated.sequence([
+                  Animated.timing(markerO, { toValue: 0.1, duration: 90, useNativeDriver: true }),
+                  Animated.timing(markerO, { toValue: 1, duration: 120, useNativeDriver: true }),
+                ]),
+                { iterations: 7 },
+              ),
+            );
+            bars.forEach((b, i) =>
+              run(
+                Animated.loop(
+                  Animated.sequence([
+                    Animated.timing(b, { toValue: Math.random(), duration: 70 + i * 30, useNativeDriver: true }),
+                    Animated.timing(b, { toValue: Math.random(), duration: 60 + i * 20, useNativeDriver: true }),
+                  ]),
+                  { iterations: 6 },
+                ),
+              ),
+            );
+            timers.push(
+              setTimeout(() => {
+                setPhase('recalc');
+                setCamera('overview');
+                run(Animated.timing(markerO, { toValue: 0, duration: 250, useNativeDriver: true }));
+                run(Animated.timing(red, { toValue: 0, duration: 400, useNativeDriver: true }));
+              }, 1700),
+            );
+            timers.push(setTimeout(() => settle(true), 3200));
+          }, after),
         );
-        timers.push(setTimeout(() => settle(true), 3200));
+      };
+      if (elapsed > hold + 4.5) settle(false);
+      else if (hold) {
+        // Glide the bike to the spot, show it there for a few seconds, then lose GPS.
+        setPhase('arrive');
+        setCamera('nav');
+        onMainRef.current = true;
+        const g = new Animated.Value(pRef.current);
+        const id = g.addListener(({ value }) => {
+          pRef.current = value;
+          progress.setValue(value);
+          setPct(value);
+        });
+        run(Animated.timing(g, { toValue: spot, duration: 1400, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }), () => g.removeListener(id));
+        startGlitch(Math.max(0, hold - elapsed) * 1000);
+      } else {
+        setP(spot);
+        startGlitch(0);
       }
     } else if (cue.kind === 'pickup' || cue.kind === 'trip') {
       setPhase('move');
@@ -155,6 +188,7 @@ export function RideScreen({
       const start = motion.ref.current.mode === 'timer' && Number.isFinite(rate) ? Math.min(to, from + rate * elapsed) : Number.isFinite(rate) ? from : to;
       setP(start);
       target.current = { to, rate, active: true };
+      onMainRef.current = cue.kind === 'trip';
       if (start >= to) setReached(true);
     }
     return () => {
@@ -201,17 +235,20 @@ export function RideScreen({
 
   // ---------- Numbers ----------
   const lost = phase === 'glitch' || phase === 'recalc';
-  const deadline = /deliver/i.test(cue.etaLabel);
-  const etaMins = parseClock(cue.eta);
+  const arriving = phase === 'arrive';
+  // While gliding to the reroute spot, show the trip that was running.
+  const shown: Cue = arriving && prevTrip ? prevTrip : cue;
+  const deadline = /deliver/i.test(shown.etaLabel);
+  const etaMins = parseClock(shown.eta);
   const line = approach ? APPROACH_LINE : ROUTE_LINE;
   const km = approach ? order.approachKm : order.tripKm;
-  let minsLeft = cue.minutesLeft;
-  if (cue.kind !== 'reroute') {
-    const from = approach ? 0 : cue.from / 100;
-    minsLeft = from < 1 ? (cue.minutesLeft * (1 - pct)) / (1 - from) : 0;
+  let minsLeft = shown.minutesLeft;
+  if (cue.kind !== 'reroute' || arriving) {
+    const from = approach ? 0 : arriving ? (prevTrip?.from ?? 0) / 100 : cue.from / 100;
+    minsLeft = from < 1 ? (shown.minutesLeft * (1 - pct)) / (1 - from) : 0;
   }
   if (deadline && etaMins !== null && clockMinutes !== null) minsLeft = Math.max(0, etaMins - clockMinutes);
-  const kmLeft = cue.kind === 'reroute' ? order.tripKm : km * (1 - pct);
+  const kmLeft = cue.kind === 'reroute' && !arriving ? order.tripKm : km * (1 - pct);
   const atPickup = approach && reached;
   const showAction = !!cue.action && ((cue.kind === 'reroute' && phase === 'settled') || ((cue.kind === 'pickup' || cue.kind === 'trip') && reached));
   const ins = instructionAt(line, approach ? APPROACH_STREETS : ROUTE_STREETS, pct, km, approach ? order.pickupName : order.dropName);
@@ -219,18 +256,18 @@ export function RideScreen({
   let banner: { kind: BannerKind; title: string; subtitle: string; distance: string } = {
     kind: 'nav',
     title: ins.text,
-    subtitle: cue.title && cue.title !== 'On trip' ? cue.title : ins.street ? `on ${ins.street}` : '',
+    subtitle: shown.kind !== 'reroute' && shown.title && shown.title !== 'On trip' ? shown.title : ins.street ? `on ${ins.street}` : '',
     distance: fmtDist(ins.metres),
   };
   if (phase === 'glitch') banner = { kind: 'lost', title: 'GPS signal lost', subtitle: 'Trying to find your location…', distance: '' };
   else if (phase === 'recalc') banner = { kind: 'recalc', title: 'Recalculating route…', subtitle: 'Please wait', distance: '' };
-  else if (cue.kind === 'reroute') banner = { kind: 'return', title: `Return to ${order.pickupName}`, subtitle: 'Cargo is back at the pickup', distance: '' };
+  else if (cue.kind === 'reroute' && !arriving) banner = { kind: 'return', title: `Return to ${order.pickupName}`, subtitle: 'Cargo is back at the pickup', distance: '' };
   else if (atPickup) banner = { kind: 'arrived', title: `You've arrived`, subtitle: `Collect cargo · ${order.pickupName}`, distance: '' };
 
   const bannerH = insets.top + 8 + 104;
   const mapH = Math.round(height * (showAction && live.alerts.length ? 0.52 : 0.6));
   const target2 = approach ? `${order.pickupName}, ${order.pickupArea}` : `${order.dropName}, ${order.dropArea}`;
-  const progressPct = lost || cue.kind === 'reroute' ? 0 : pct;
+  const progressPct = lost || (cue.kind === 'reroute' && !arriving) ? 0 : pct;
 
   return (
     <Animated.View style={{ flex: 1, backgroundColor: '#0A1530', opacity: enter }}>
@@ -240,7 +277,7 @@ export function RideScreen({
           line={approach ? 'approach' : 'main'}
           progress={progress}
           camera={camera}
-          travelled={approach ? 0 : pct}
+          travelled={approach || (cue.kind === 'reroute' && phase === 'settled') ? 0 : pct}
           reveal={reveal}
           routeOpacity={routeO}
           markerOpacity={markerO}
@@ -271,11 +308,11 @@ export function RideScreen({
 
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <View>
-            <Text style={t(F.b8, 11, L.muted, { letterSpacing: 1.6 })}>{(atPickup ? 'ARRIVED' : cue.etaLabel || 'ETA').toUpperCase()}</Text>
+            <Text style={t(F.b8, 11, L.muted, { letterSpacing: 1.6 })}>{(atPickup ? 'ARRIVED' : shown.etaLabel || 'ETA').toUpperCase()}</Text>
             {lost ? (
               <Text style={t(F.d8, 36, L.red, { letterSpacing: 2, marginTop: 2 })}>--:--</Text>
             ) : (
-              <Text style={[TAB, t(F.d8, 36, L.ink, { letterSpacing: -0.8, marginTop: 2 })]}>{atPickup ? clock || cue.eta : cue.eta || '—'}</Text>
+              <Text style={[TAB, t(F.d8, 36, L.ink, { letterSpacing: -0.8, marginTop: 2 })]}>{atPickup ? clock || shown.eta : shown.eta || '—'}</Text>
             )}
           </View>
           <View style={{ alignItems: 'flex-end', paddingBottom: 3 }}>

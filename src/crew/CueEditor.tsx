@@ -11,7 +11,7 @@ const KIND_HELP: Record<CueKind, string> = {
   offer: 'Full-screen order request. The rider swipes to accept, which moves on to the next cue. Uses the Trip details.',
   pickup: 'Map shows the ride from the petrol pump to the banyan. When the marker arrives, the rider gets the swipe below.',
   trip: 'Map shows the bike moving along the route (0 = banyan, 100 = ghat).',
-  reroute: 'GPS-lost glitch, then the route redraws back to the banyan, with this message in the updates.',
+  reroute: 'Betaal vanishes. If the bike isn’t already at the spot below, it glides there and stays 5 seconds; then GPS is lost and the route redraws back to the banyan, with this message in the updates.',
   alert: 'A message that drops in over whatever is on screen. Stays in the ride updates.',
   arrival: 'Delivery point reached, with Confirm delivery / Cancel order (cancel shows the forfeit warning, then ₹0).',
   dashboard: 'Back to the rider dashboard.',
@@ -167,6 +167,10 @@ export function CueEditor({
           </View>
           <NumField label="Marker travel time (real seconds)" value={d.moveSeconds} onChange={(moveSeconds) => up({ moveSeconds })} />
         </>
+      )}
+
+      {k === 'reroute' && (
+        <NumField label="Where Betaal vanishes on the route (0 = banyan, 100 = ghat)" value={d.from} onChange={(from) => up({ from: Math.min(100, from) })} />
       )}
 
       {(k === 'alert' || k === 'trip' || k === 'reroute' || k === 'arrival') && (

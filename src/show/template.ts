@@ -1,7 +1,9 @@
 // The template that ships with the app, built from the script.
 // Every value can be edited on either phone; "Reset to template" brings these back.
 //
-// Story clock (one night, ~1:49 AM → 6:09 AM). A full trip from the banyan to the ghat
+// Story clock (one night, ~1:49 AM → 6:09 AM). Each "Betaal gone" reroute also has a route
+// position (`from`, 0–100) so the bike is shown at the right spot before the map glitches.
+// A full trip from the banyan to the ghat
 // takes 36 minutes, so every ETA below is the restart time + 36 min, until the third
 // restart, when the app stops recalculating and fixes a "Deliver by 6:12 AM" deadline.
 
@@ -64,7 +66,7 @@ export const CUES: Cue[] = [
   makeCue({
     id: 'e1-reroute', episode: 1, kind: 'reroute', clock: '2:16 AM', label: 'Sc 4 · Betaal gone — map reroutes',
     title: 'Cargo returned to pickup', body: 'Rider, please restart. ETA 2:57 AM.', tone: 'warn',
-    eta: '2:57 AM', minutesLeft: 36, action: 'Restart trip',
+    eta: '2:57 AM', minutesLeft: 36, action: 'Restart trip', from: 50,
   }),
 
   // ---------- Episode 2 · Do Chhatein ----------
@@ -75,7 +77,7 @@ export const CUES: Cue[] = [
   makeCue({
     id: 'e2-reroute', episode: 2, kind: 'reroute', clock: '2:39 AM', label: 'Sc 6 end · Betaal flies back — reroute',
     title: 'Cargo returned to pickup', body: 'Rider, please restart.', tone: 'warn',
-    eta: '3:17 AM', minutesLeft: 36, action: 'Restart trip',
+    eta: '3:17 AM', minutesLeft: 36, action: 'Restart trip', from: 50,
   }),
   makeCue({
     id: 'e2-penalty', episode: 2, kind: 'alert', clock: '2:41 AM', label: 'Sc 7 · Late penalty',
@@ -94,7 +96,7 @@ export const CUES: Cue[] = [
   makeCue({
     id: 'e3-reroute', episode: 3, kind: 'reroute', clock: '3:04 AM', label: 'Sc 9 · Betaal vanishes — deliver by 6:12',
     title: 'Restart', body: 'Cargo returned to pickup. Deliver by 6:12 AM.', tone: 'warn',
-    eta: '6:12 AM', etaLabel: 'Deliver by', minutesLeft: 188, action: 'Restart trip', payout: 46000
+    eta: '6:12 AM', etaLabel: 'Deliver by', minutesLeft: 188, action: 'Restart trip', from: 58, payout: 46000
   }),
 
   // ---------- Episode 4 · Taala ----------
@@ -109,7 +111,7 @@ export const CUES: Cue[] = [
   makeCue({
     id: 'e4-reroute', episode: 4, kind: 'reroute', clock: '3:46 AM', label: 'Sc 13 · Engine dies — restart',
     title: 'Restart', body: 'Cargo returned to pickup. Deliver by 6:12 AM.', tone: 'warn',
-    eta: '6:12 AM', etaLabel: 'Deliver by', minutesLeft: 146, action: 'Restart trip', payout: 46000
+    eta: '6:12 AM', etaLabel: 'Deliver by', minutesLeft: 146, action: 'Restart trip', from: 45, payout: 46000
   }),
 
   // ---------- Episode 5 · Raddiwala ----------
@@ -120,7 +122,7 @@ export const CUES: Cue[] = [
   makeCue({
     id: 'e5-reroute', episode: 5, kind: 'reroute', clock: '5:31 AM', label: 'Sc 16 · Betaal back to the tree — 41 min',
     title: 'Cargo returned to pickup', body: 'ETA 6:12 AM. 41 min remaining.', tone: 'warn',
-    eta: '6:12 AM', etaLabel: 'Deliver by', minutesLeft: 41, action: 'Restart trip', payout: 46000
+    eta: '6:12 AM', etaLabel: 'Deliver by', minutesLeft: 41, action: 'Restart trip', from: 40, payout: 46000
   }),
 
   // ---------- Episode 6 · Aakhri Panna ----------

@@ -17,7 +17,7 @@ Bright cards on a dark night map, in two typefaces: **Sora** for numbers and hea
 | **Order accepted** | Accept morphs into a blue *Order accepted* screen, then hands over to the ride view. |
 | **Ride** | A sat-nav view: the map is zoomed in, follows the rider and **turns with the road**, with a turn-by-turn banner (*Turn right onto NH 66 · 450 m*), ETA, minutes and km left, payout, updates, and a **Cancel order** button that is always on screen. |
 | **GPS movement** | The marker moves only while the rider phone is actually moving (it reads GPS; faster riding means a faster marker) and stays still when the rider stops. *Timer* and *Hold* modes are in the crew panel; if GPS drops out, it falls back to the timer. |
-| **Reroute** | *GPS signal lost* (red, map shakes) → *Recalculating route* (amber, map zooms out) → the route redraws from the banyan → zooms back in, with a **Restart trip** swipe. |
+| **Reroute** | The bike is first synced to where Betaal vanishes in the script: if it isn't already there, it glides to that spot and stays 5 seconds (with the story time already set). Then *GPS signal lost* (red, map shakes) → *Recalculating route* (amber, map zooms out) → the route redraws from the banyan → zooms back in, with a **Restart trip** swipe. |
 | **Messages** | Banners drop in over any screen (white, amber or a red gradient for penalties) and stay in the ride's updates. |
 | **Arrival** | *You've arrived* with **Confirm delivery** and **Cancel order**. |
 | **Cancelled / delivered** | "You will forfeit ₹46,000. Are you sure?" → *Order cancelled*, with earnings rolling down to **₹0**. This screen syncs to every paired phone. |

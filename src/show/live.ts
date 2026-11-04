@@ -150,9 +150,16 @@ export function cleanDashboard(d: Partial<Dashboard> | null | undefined): Dashbo
   };
 }
 
+/** Older saved cue sheets had no reroute position; take the template's spot for those cues. */
+function fillRerouteSpot(c: Cue): Cue {
+  if (c.kind !== 'reroute' || c.from !== 0) return c;
+  const tpl = TEMPLATE.cues.find((x) => x.id === c.id);
+  return tpl && tpl.from > 0 ? { ...c, from: tpl.from } : c;
+}
+
 export function cleanShow(s: Partial<Show> | null | undefined): Show {
   if (!s || typeof s !== 'object') return TEMPLATE;
-  const cues = s.cues === undefined ? TEMPLATE.cues : arr<Partial<Cue>>(s.cues).map(cleanCue);
+  const cues = s.cues === undefined ? TEMPLATE.cues : arr<Partial<Cue>>(s.cues).map(cleanCue).map(fillRerouteSpot);
   const episodes = arr<Show['episodes'][number]>(s.episodes);
   return {
     version: 3,
